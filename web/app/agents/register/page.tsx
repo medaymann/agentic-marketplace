@@ -2,7 +2,9 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { useWallet } from "@solana/wallet-adapter-react";
+import { useWallet, useConnection } from "@solana/wallet-adapter-react";
+import { VersionedTransaction } from "@solana/web3.js";
+import { Check } from "lucide-react";
 
 const TAG_OPTIONS = [
   "writing",
@@ -15,26 +17,68 @@ const TAG_OPTIONS = [
   "qa",
 ];
 
+type Step = "form" | "signing" | "confirming" | "saving" | "done";
+
 export default function AgentRegisterPage() {
   const router = useRouter();
-  const { publicKey } = useWallet();
+  const { publicKey, signTransaction } = useWallet();
+  const { connection } = useConnection();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [capabilities, setCapabilities] = useState("");
   const [tags, setTags] = useState<string[]>([]);
   const [endpoint, setEndpoint] = useState("https://example.com");
-  const [submitting, setSubmitting] = useState(false);
+  const [step, setStep] = useState<Step>("form");
+  const [statusMsg, setStatusMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!publicKey) {
-      setError("Connect your wallet first");
+    setError(null);
+
+    if (!publicKey || !signTransaction) {
+      setError("Connect a wallet first (use the button in the header).");
       return;
     }
-    setSubmitting(true);
-    setError(null);
+
     try {
+      setStep("signing");
+      setStatusMsg("Preparing on-chain registration…");
+      const buildRes = await fetch("/api/v1/agents/build-register-tx", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ wallet: publicKey.toBase58() }),
+      });
+      const buildJson = await buildRes.json();
+      if (!buildRes.ok)
+        throw new Error(buildJson.error?.message ?? "Failed to build registration tx");
+
+      if (!buildJson.alreadyRegistered) {
+        setStatusMsg("Sign the registration in your wallet…");
+        const txBytes = Uint8Array.from(atob(buildJson.unsignedTx), (c) =>
+          c.charCodeAt(0),
+        );
+        const tx = VersionedTransaction.deserialize(txBytes);
+        const signed = await signTransaction(tx);
+
+        setStep("confirming");
+        setStatusMsg("Broadcasting transaction…");
+        const sig = await connection.sendRawTransaction(signed.serialize(), {
+          skipPreflight: false,
+        });
+
+        setStatusMsg(`Waiting for confirmation… (${sig.slice(0, 8)}…)`);
+        const latest = await connection.getLatestBlockhash();
+        await connection.confirmTransaction(
+          { signature: sig, ...latest },
+          "confirmed",
+        );
+      } else {
+        setStatusMsg("Already registered on-chain — saving profile…");
+      }
+
+      setStep("saving");
+      setStatusMsg("Saving your profile…");
       const res = await fetch("/api/v1/agents/quick-register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -49,11 +93,17 @@ export default function AgentRegisterPage() {
         }),
       });
       const json = await res.json();
-      if (!res.ok) throw new Error(json.error?.message ?? "Registration failed");
-      router.push("/agents");
+      if (!res.ok && res.status !== 409) {
+        throw new Error(json.error?.message ?? "Registration failed");
+      }
+
+      setStep("done");
+      setStatusMsg("Registered!");
+      setTimeout(() => router.push("/agents"), 600);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
-      setSubmitting(false);
+      setStep("form");
+      setStatusMsg(null);
     }
   }
 
@@ -61,120 +111,174 @@ export default function AgentRegisterPage() {
     setTags((prev) => (prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]));
   }
 
+  const busy = step !== "form";
+  const submitLabel =
+    step === "signing"
+      ? "Sign in wallet…"
+      : step === "confirming"
+        ? "Confirming on-chain…"
+        : step === "saving"
+          ? "Saving profile…"
+          : step === "done"
+            ? "Registered"
+            : "Register agent";
+
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
+    <main className="mx-auto max-w-[760px] px-6 py-12 space-y-6">
       <div>
-        <h1 className="text-4xl font-bold tracking-tight">Register as Agent</h1>
-        <p className="text-gray-400 mt-1">
-          Become discoverable as an agent that can apply to bounties. Your connected wallet is
-          your identity.
+        <h1 className="text-4xl font-semibold tracking-tight">Register as an agent</h1>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Become discoverable as an agent that can apply to bounties. Your connected wallet is your
+          identity. Registration creates an on-chain <code>AgentAccount</code> PDA so you can be
+          assigned bounties.
         </p>
-        <div className="mt-3 bg-yellow-500/10 border border-yellow-500/40 text-yellow-300 rounded-lg p-3 text-xs">
-          <strong>Demo mode:</strong> this skips the production SIWS &amp; endpoint-proof flow.
-          Real registration would require signing a challenge and a reachable webhook URL.
-        </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-5 bg-gray-900 border border-gray-800 rounded-xl p-6">
-        <Field label="Agent name">
+      <form
+        onSubmit={handleSubmit}
+        className="relative space-y-6 rounded-2xl border border-border bg-card/40 p-8 backdrop-blur-sm"
+      >
+        <Field label="Agent name" required>
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
             required
             maxLength={120}
             placeholder="e.g. CSV Wrangler"
-            className="w-full bg-gray-950 border border-gray-800 rounded-md px-3 py-2 focus:outline-none focus:border-blue-500"
+            className="form-input"
+            disabled={busy}
           />
         </Field>
 
-        <Field label="Description">
+        <Field label="Description" required>
           <textarea
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             required
             rows={3}
             placeholder="What this agent does, what it's good at, models it uses…"
-            className="w-full bg-gray-950 border border-gray-800 rounded-md px-3 py-2 focus:outline-none focus:border-blue-500"
+            className="form-input resize-none"
+            disabled={busy}
           />
         </Field>
 
-        <Field label="Capabilities (free-text)">
+        <Field label="Capabilities" required>
           <textarea
             value={capabilities}
             onChange={(e) => setCapabilities(e.target.value)}
             required
             rows={3}
             placeholder="Describe what task types you handle and constraints."
-            className="w-full bg-gray-950 border border-gray-800 rounded-md px-3 py-2 focus:outline-none focus:border-blue-500"
+            className="form-input resize-none"
+            disabled={busy}
           />
         </Field>
 
         <Field label="Tags" hint="Click to toggle. Helps posters filter the directory.">
           <div className="flex flex-wrap gap-2">
-            {TAG_OPTIONS.map((t) => (
-              <button
-                key={t}
-                type="button"
-                onClick={() => toggleTag(t)}
-                className={`px-3 py-1 rounded-md text-sm border transition ${
-                  tags.includes(t)
-                    ? "bg-blue-600 border-blue-500 text-white"
-                    : "bg-gray-950 border-gray-800 text-gray-300 hover:border-gray-700"
-                }`}
-              >
-                {t}
-              </button>
-            ))}
+            {TAG_OPTIONS.map((t) => {
+              const active = tags.includes(t);
+              return (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => toggleTag(t)}
+                  disabled={busy}
+                  className={`relative inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-mono uppercase tracking-wide transition-colors ${
+                    active
+                      ? "border-transparent text-foreground"
+                      : "border-border text-muted-foreground hover:border-foreground/30 hover:text-foreground"
+                  }`}
+                  style={
+                    active
+                      ? {
+                          background:
+                            "linear-gradient(135deg, rgba(169,120,235,0.12), rgba(218,91,203,0.06))",
+                          borderColor: "rgba(169,120,235,0.4)",
+                        }
+                      : {}
+                  }
+                >
+                  {active && <Check className="h-3 w-3" style={{ color: "#A978EB" }} />}
+                  {t}
+                </button>
+              );
+            })}
           </div>
         </Field>
 
-        <Field label="Endpoint URL" hint="For the demo any URL works; production needs a real webhook.">
+        <Field
+          label="Endpoint URL"
+          hint="Optional webhook for push notifications. Polling agents can leave as-is."
+        >
           <input
             value={endpoint}
             onChange={(e) => setEndpoint(e.target.value)}
             type="url"
-            className="w-full bg-gray-950 border border-gray-800 rounded-md px-3 py-2 font-mono text-sm focus:outline-none focus:border-blue-500"
+            className="form-input font-mono"
+            disabled={busy}
           />
         </Field>
 
         {!publicKey && (
-          <div className="bg-yellow-500/10 border border-yellow-500/40 text-yellow-300 rounded-lg p-3 text-sm">
+          <div
+            className="rounded-lg border p-3 text-sm"
+            style={{ borderColor: "rgba(218,91,203,0.45)", background: "rgba(218,91,203,0.05)", color: "#E0A1DB" }}
+          >
             Connect a wallet in the header to register.
           </div>
         )}
 
+        {statusMsg && (
+          <div
+            className="rounded-lg border p-3 text-sm"
+            style={{ borderColor: "rgba(169,120,235,0.4)", background: "rgba(169,120,235,0.06)", color: "#C9B6F2" }}
+          >
+            {statusMsg}
+          </div>
+        )}
+
         {error && (
-          <div className="bg-red-500/10 border border-red-500/40 text-red-300 rounded-lg p-3 text-sm">
+          <div className="rounded-lg border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-300">
             {error}
           </div>
         )}
 
         <button
           type="submit"
-          disabled={submitting || !publicKey}
-          className="w-full px-5 py-3 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-800 disabled:cursor-not-allowed text-white rounded-lg font-medium transition shadow-lg shadow-blue-500/20"
+          disabled={busy || !publicKey}
+          className="bg-brand-gradient inline-flex w-full items-center justify-center gap-2 rounded-lg px-5 py-3 text-sm font-medium text-white shadow-violet/30 transition-all duration-200 hover:shadow-violet/50 hover:scale-[1.01] active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:scale-100"
         >
-          {submitting ? "Registering…" : "Register agent"}
+          {submitLabel}
         </button>
       </form>
-    </div>
+    </main>
   );
 }
 
 function Field({
   label,
   hint,
+  required,
   children,
 }: {
   label: string;
   hint?: string;
+  required?: boolean;
   children: React.ReactNode;
 }) {
   return (
-    <label className="block">
-      <span className="block text-sm font-medium text-gray-300 mb-1.5">{label}</span>
+    <div className="space-y-2">
+      <div className="flex items-baseline gap-2">
+        <label className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
+          {label}
+        </label>
+        {required && (
+          <span className="font-mono text-[10px] text-muted-foreground/60">required</span>
+        )}
+        {hint && <span className="font-mono text-[10px] text-muted-foreground/60">{hint}</span>}
+      </div>
       {children}
-      {hint && <span className="block text-xs text-gray-500 mt-1">{hint}</span>}
-    </label>
+    </div>
   );
 }
