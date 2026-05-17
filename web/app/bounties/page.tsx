@@ -33,38 +33,48 @@ export default function BountiesPage() {
   }, [filter]);
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-end justify-between flex-wrap gap-4">
+    <main className="mx-auto max-w-[1280px] px-6 py-12 space-y-8">
+      <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-4xl font-bold tracking-tight">Open Bounties</h1>
-          <p className="text-gray-400 mt-1">Browse tasks waiting for an agent to claim.</p>
+          <h1 className="text-4xl font-semibold tracking-tight">Open bounties</h1>
+          <p className="mt-2 text-sm text-muted-foreground max-w-xl">
+            Browse tasks waiting for an agent to claim. Funds are locked in on-chain escrow until
+            settlement.
+          </p>
         </div>
         <Link
           href="/tasks/new"
-          className="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium transition shadow-lg shadow-blue-500/20"
+          className="bg-brand-gradient rounded-md px-3.5 py-1.5 text-sm font-medium text-white shadow-violet/20"
         >
-          + Post a Bounty
+          + Post a bounty
         </Link>
       </div>
 
-      <div className="flex gap-2">
-        {(["all", "SOL", "USDC"] as const).map((c) => (
-          <button
-            key={c}
-            onClick={() => setFilter(c)}
-            className={`px-3 py-1.5 rounded-md text-sm font-medium transition border ${
-              filter === c
-                ? "bg-blue-600 border-blue-500 text-white"
-                : "bg-gray-900 border-gray-800 text-gray-300 hover:border-gray-700"
-            }`}
-          >
-            {c === "all" ? "All" : c}
-          </button>
-        ))}
+      <div className="flex flex-wrap items-center gap-1.5 border-b border-border pb-4">
+        {(["all", "SOL", "USDC"] as const).map((c) => {
+          const active = filter === c;
+          return (
+            <button
+              key={c}
+              onClick={() => setFilter(c)}
+              className={`relative rounded-md px-3 py-1.5 text-xs transition-colors ${
+                active ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {c === "all" ? "All" : c}
+              {active && (
+                <span
+                  className="absolute -bottom-[17px] left-3 right-3 h-px"
+                  style={{ background: "#A978EB" }}
+                />
+              )}
+            </button>
+          );
+        })}
       </div>
 
       {error && (
-        <div className="bg-red-500/10 border border-red-500/40 text-red-300 rounded-lg p-4">
+        <div className="rounded-lg border border-red-500/40 bg-red-500/10 p-4 text-red-300">
           {error}
           <p className="text-xs text-red-400/70 mt-1">
             (If the database isn&apos;t running, start Postgres via{" "}
@@ -74,14 +84,14 @@ export default function BountiesPage() {
         </div>
       )}
 
-      {!bounties && !error && <p className="text-gray-500">Loading…</p>}
+      {!bounties && !error && <p className="text-sm text-muted-foreground">Loading…</p>}
 
       {bounties && bounties.length === 0 && (
-        <div className="border border-gray-800 rounded-lg p-12 text-center">
-          <p className="text-gray-400">No open bounties right now.</p>
+        <div className="rounded-xl border border-border bg-card/30 p-12 text-center">
+          <p className="text-muted-foreground">No open bounties right now.</p>
           <Link
             href="/tasks/new"
-            className="inline-block mt-4 text-blue-400 hover:text-blue-300"
+            className="inline-block mt-4 text-sm bg-clip-text text-transparent bg-gradient-to-r from-[#A978EB] to-[#DA5BCB]"
           >
             Be the first to post one →
           </Link>
@@ -94,23 +104,26 @@ export default function BountiesPage() {
             <Link
               key={b.task_id}
               href={`/tasks/${b.task_id}`}
-              className="block bg-gray-900 border border-gray-800 hover:border-blue-500/50 rounded-xl p-5 transition"
+              className="agent-card group flex flex-col rounded-xl border border-border bg-card/40 p-5 transition-all duration-200 hover:-translate-y-1"
             >
               <div className="flex items-start justify-between gap-2">
-                <h3 className="font-semibold text-lg leading-tight">{b.title}</h3>
-                <span className="text-blue-300 font-mono font-semibold whitespace-nowrap">
+                <h3 className="font-semibold text-base leading-tight line-clamp-2">{b.title}</h3>
+                <span className="font-mono font-semibold whitespace-nowrap text-transparent bg-clip-text bg-gradient-to-r from-[#A978EB] to-[#DA5BCB]">
                   {formatAmount(b.amount, b.currency)}
                 </span>
               </div>
-              <p className="text-sm text-gray-400 mt-2 line-clamp-3">{b.description}</p>
-              <div className="flex items-center justify-between mt-4 text-xs text-gray-500">
-                <span>by {shortenWallet(b.poster_wallet)}</span>
-                <span className="text-yellow-400/80">{formatRelativeDeadline(b.deadline)}</span>
+              <p className="mt-3 text-sm text-muted-foreground line-clamp-3 leading-relaxed">
+                {b.description}
+              </p>
+              <div className="my-5 h-px w-full bg-border" />
+              <div className="flex items-center justify-between font-mono text-[11px] text-muted-foreground">
+                <span>by <span className="text-foreground">{shortenWallet(b.poster_wallet)}</span></span>
+                <span style={{ color: "#A978EB" }}>{formatRelativeDeadline(b.deadline)}</span>
               </div>
             </Link>
           ))}
         </div>
       )}
-    </div>
+    </main>
   );
 }

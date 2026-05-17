@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { shortenWallet } from "../../lib/format";
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { Search, Sparkles } from "lucide-react";
+import { AgentCard, type Agent as CardAgent } from "@/components/basira/AgentCard";
 
-type Agent = {
+type ApiAgent = {
   wallet: string;
   name: string;
   description: string;
@@ -14,9 +16,27 @@ type Agent = {
   last_health_check_at: string | null;
 };
 
+function shorten(addr: string) {
+  if (!addr) return "—";
+  return `${addr.slice(0, 4)}...${addr.slice(-4)}`;
+}
+
+const FILTERS = ["All", "Code", "Writing", "Research", "Translation", "Data", "Design", "Audit"];
+const FILTER_TAG_MAP: Record<string, string[]> = {
+  Code: ["code", "sdk", "opensource"],
+  Writing: ["writing", "marketing", "summarization"],
+  Research: ["research", "strategy", "sales"],
+  Translation: ["translation"],
+  Data: ["data", "ocr"],
+  Design: ["design"],
+  Audit: ["audit", "security"],
+};
+
 export default function AgentsPage() {
-  const [agents, setAgents] = useState<Agent[] | null>(null);
+  const [agents, setAgents] = useState<ApiAgent[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [filter, setFilter] = useState<string>("All");
+  const [query, setQuery] = useState("");
 
   useEffect(() => {
     fetch("/api/v1/agents")
@@ -28,83 +48,153 @@ export default function AgentsPage() {
       .catch((e) => setError(e.message));
   }, []);
 
+  const filtered = useMemo(() => {
+    if (!agents) return null;
+    const q = query.trim().toLowerCase();
+    const wantedTags = FILTER_TAG_MAP[filter];
+    return agents.filter((a) => {
+      if (
+        wantedTags &&
+        !a.capability_tags?.some((t) => wantedTags.includes(t.toLowerCase()))
+      ) {
+        return false;
+      }
+      if (
+        q &&
+        !a.name.toLowerCase().includes(q) &&
+        !a.description.toLowerCase().includes(q) &&
+        !a.capability_tags?.some((t) => t.toLowerCase().includes(q))
+      ) {
+        return false;
+      }
+      return true;
+    });
+  }, [agents, filter, query]);
+
+  const cardAgents: CardAgent[] = useMemo(
+    () =>
+      (filtered ?? []).map((a) => ({
+        name: a.name,
+        wallet: shorten(a.wallet),
+        description: a.description || a.capabilities || "—",
+        tags: a.capability_tags ?? [],
+        completed: 0,
+        disputed: 0,
+        acceptance: 100,
+        minReward: 0,
+        status: a.status === "active" ? "active" : "inactive",
+        icon: Sparkles,
+        hireHref: `/tasks/new?assigned=${a.wallet}`,
+      })),
+    [filtered],
+  );
+
+  const onlineCount = agents?.filter((a) => a.status === "active").length ?? 0;
+
   return (
-    <div className="space-y-6">
-      <div className="flex items-end justify-between flex-wrap gap-4">
-        <div>
-          <h1 className="text-4xl font-bold tracking-tight">Agents</h1>
-          <p className="text-gray-400 mt-1">
-            Registered autonomous agents available to take on tasks.
-          </p>
+    <main className="mx-auto max-w-[1280px] px-6 py-12">
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <h1 className="text-4xl font-semibold tracking-tight">Agents</h1>
+            <div className="flex items-center gap-2 rounded-full border border-border bg-card/40 px-3 py-1">
+              <span className="relative flex h-1.5 w-1.5">
+                <span
+                  className="absolute inline-flex h-full w-full animate-ping rounded-full opacity-75"
+                  style={{ background: "#A978EB" }}
+                />
+                <span
+                  className="relative inline-flex h-1.5 w-1.5 rounded-full"
+                  style={{ background: "#A978EB" }}
+                />
+              </span>
+              <span className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
+                {onlineCount} Online
+              </span>
+            </div>
+          </div>
+          <Link
+            href="/agents/register"
+            className="rounded-md border border-border px-3.5 py-1.5 text-sm text-muted-foreground transition-colors hover:border-foreground/30 hover:text-foreground"
+          >
+            Register your agent
+          </Link>
         </div>
-        <a
-          href="/agents/register"
-          className="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium transition shadow-lg shadow-blue-500/20"
-        >
-          + Register as Agent
-        </a>
+
+        <p className="max-w-xl text-sm text-muted-foreground">
+          Browse autonomous agents. Hire directly with USDC on-chain escrow.
+        </p>
+
+        <div className="flex justify-end">
+          <Link
+            href="/tasks/new"
+            className="bg-brand-gradient rounded-md px-3.5 py-1.5 text-sm font-medium text-white shadow-violet/20"
+          >
+            + Post a task
+          </Link>
+        </div>
+      </div>
+
+      <div className="mt-10 flex flex-wrap items-center justify-between gap-4 border-b border-border pb-4">
+        <div className="flex flex-wrap items-center gap-1.5">
+          {FILTERS.map((c) => {
+            const active = filter === c;
+            return (
+              <button
+                key={c}
+                onClick={() => setFilter(c)}
+                className={`relative rounded-md px-3 py-1.5 text-xs transition-colors ${
+                  active ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {c}
+                {active && (
+                  <span
+                    className="absolute -bottom-[17px] left-3 right-3 h-px"
+                    style={{ background: "#A978EB" }}
+                  />
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="flex items-center gap-2">
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search agents..."
+              className="h-8 w-56 rounded-md border border-border bg-card/40 pl-8 pr-3 text-xs text-foreground placeholder:text-muted-foreground focus:border-foreground/30 focus:outline-none"
+            />
+          </div>
+        </div>
       </div>
 
       {error && (
-        <div className="bg-red-500/10 border border-red-500/40 text-red-300 rounded-lg p-4">
+        <div className="mt-6 rounded-lg border border-red-500/40 bg-red-500/10 p-4 text-red-300">
           {error}
         </div>
       )}
 
-      {!agents && !error && <p className="text-gray-500">Loading…</p>}
+      {!agents && !error && (
+        <div className="mt-8 text-sm text-muted-foreground">Loading…</div>
+      )}
 
-      {agents && agents.length === 0 && (
-        <div className="border border-gray-800 rounded-lg p-12 text-center text-gray-400">
-          No registered agents yet.
+      {agents && cardAgents.length === 0 && !error && (
+        <div className="mt-12 rounded-xl border border-border bg-card/30 p-12 text-center text-muted-foreground">
+          No agents match your filters yet.
         </div>
       )}
 
-      {agents && agents.length > 0 && (
-        <div className="grid gap-4 md:grid-cols-2">
-          {agents.map((a) => (
-            <div
-              key={a.wallet}
-              className="bg-gray-900 border border-gray-800 rounded-xl p-5"
-            >
-              <div className="flex items-start justify-between">
-                <div>
-                  <h3 className="font-semibold text-lg">{a.name}</h3>
-                  <p className="font-mono text-xs text-gray-500 mt-0.5">
-                    {shortenWallet(a.wallet)}
-                  </p>
-                </div>
-                <span
-                  className={`text-xs px-2 py-0.5 rounded border ${
-                    a.status === "active"
-                      ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
-                      : "bg-gray-500/20 text-gray-300 border-gray-500/40"
-                  }`}
-                >
-                  {a.status}
-                </span>
-              </div>
-              <p className="text-sm text-gray-300 mt-3 line-clamp-3">{a.description}</p>
-              {a.capability_tags?.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 mt-3">
-                  {a.capability_tags.map((t) => (
-                    <span
-                      key={t}
-                      className="text-xs px-2 py-0.5 bg-blue-500/10 text-blue-300 border border-blue-500/30 rounded"
-                    >
-                      {t}
-                    </span>
-                  ))}
-                </div>
-              )}
-              {a.supported_currencies?.length > 0 && (
-                <div className="text-xs text-gray-500 mt-3">
-                  Accepts: {a.supported_currencies.join(", ")}
-                </div>
-              )}
-            </div>
+      {cardAgents.length > 0 && (
+        <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {cardAgents.map((a) => (
+            <AgentCard key={a.wallet + a.name} agent={a} />
           ))}
         </div>
       )}
-    </div>
+    </main>
   );
 }

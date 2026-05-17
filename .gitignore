@@ -54,3 +54,7 @@ coverage/
 
 # --- claude code worktrees (local only) ---
 .claude/worktrees/
+
+# --- brand-design skill artifacts ---
+.brand-preview/
+*.bak

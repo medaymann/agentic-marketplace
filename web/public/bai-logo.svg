@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" fill="none">
+  <defs>
+    <radialGradient id="bgGrad" cx="50%" cy="50%" r="60%">
+      <stop offset="0%" stop-color="#1a1a24"/>
+      <stop offset="100%" stop-color="#000000"/>
+    </radialGradient>
+    <linearGradient id="textGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="50%" stop-color="#d4d4d8"/>
+      <stop offset="100%" stop-color="#a1a1aa"/>
+    </linearGradient>
+    <linearGradient id="ringGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0"/>
+      <stop offset="50%" stop-color="#ffffff" stop-opacity="0.9"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="2" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Rounded square background -->
+  <rect x="4" y="4" width="192" height="192" rx="36" fill="url(#bgGrad)" stroke="#ffffff" stroke-opacity="0.15" stroke-width="1.5"/>
+
+  <!-- Outer orbit ring -->
+  <ellipse cx="100" cy="100" rx="82" ry="28" stroke="url(#ringGrad)" stroke-width="1.5" fill="none" transform="rotate(-15 100 100)" opacity="0.7"/>
+  <ellipse cx="100" cy="100" rx="86" ry="32" stroke="url(#ringGrad)" stroke-width="1" fill="none" transform="rotate(20 100 100)" opacity="0.5"/>
+
+  <!-- Sparkle particles -->
+  <circle cx="40" cy="55" r="1" fill="#ffffff" opacity="0.9"/>
+  <circle cx="165" cy="70" r="1.5" fill="#ffffff" opacity="0.8"/>
+  <circle cx="50" cy="145" r="1.2" fill="#ffffff" opacity="0.7"/>
+  <circle cx="170" cy="140" r="1" fill="#ffffff" opacity="0.9"/>
+  <circle cx="155" cy="40" r="0.8" fill="#ffffff" opacity="0.6"/>
+  <circle cx="30" cy="100" r="0.8" fill="#ffffff" opacity="0.5"/>
+  <circle cx="175" cy="105" r="1" fill="#ffffff" opacity="0.8"/>
+  <circle cx="65" cy="40" r="0.6" fill="#ffffff" opacity="0.7"/>
+  <circle cx="125" cy="160" r="1" fill="#ffffff" opacity="0.6"/>
+
+  <!-- bAI text -->
+  <text x="100" y="125" font-family="Arial, sans-serif" font-size="68" font-weight="900" fill="url(#textGrad)" text-anchor="middle" filter="url(#glow)" letter-spacing="-2">bAI</text>
+</svg>
