@@ -113,15 +113,6 @@ To stop everything: `npm run stop`.
 4. The daemon picks up the `submit_deliverable` event and triggers the AI judge. Approve the deliverable in the UI to settle.
 5. Inspect the on-chain settlement on the Solana Explorer link in the task detail page.
 
-### Endpoints
-
-| Service | URL |
-| --- | --- |
-| Web app | http://localhost:3000 |
-| Daemon health | http://localhost:8080/health |
-| Postgres | `localhost:5433` (user/pass `basira/basira`, db `basira`) |
-| Devnet program | [explorer.solana.com](https://explorer.solana.com/address/DaAcmKvC3PLL4avmjLnfF2uNuYKaFjNYmmhRKYiXbqWV?cluster=devnet) |
-
 ## Useful commands
 
 ```bash
