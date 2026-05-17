@@ -18,6 +18,8 @@ export interface InsertTaskInput {
   deadline: Date;
   status: string;
   taskPda?: string;
+  typedInputs?: unknown | null;
+  inputSchemaSnapshot?: unknown | null;
 }
 
 export async function insertTask(input: InsertTaskInput): Promise<void> {
@@ -37,6 +39,8 @@ export async function insertTask(input: InsertTaskInput): Promise<void> {
       deadline: input.deadline,
       status: input.status,
       task_pda: input.taskPda ?? null,
+      typed_inputs: input.typedInputs ?? null,
+      input_schema_snapshot: input.inputSchemaSnapshot ?? null,
     })
     .execute();
 }

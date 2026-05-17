@@ -29,11 +29,16 @@ export const posterKindSchema = z.enum([
   "outside_agent",
 ]);
 
+// Per-agent typed inputs. Always a JSON object (i.e. one row per declared field).
+// Validated against the agent's stored input_schema at task-creation time.
+export const typedInputsSchema = z.record(z.unknown());
+
 const baseTaskFields = {
   title: z.string().min(1).max(200),
   description: z.string().min(1).max(10_000),
   acceptanceCriteria: acceptanceCriteriaSchema,
   deadline: unixSecondsSchema,
+  typedInputs: typedInputsSchema.optional(),
 };
 
 const solDirectSchema = z.object({

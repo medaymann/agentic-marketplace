@@ -84,3 +84,11 @@ export type WebhookDeliveryRow = z.infer<typeof webhookDeliveryRowSchema>;
 export type WebhookDeliveryStatus = z.infer<typeof webhookDeliveryStatusSchema>;
 export type WebhookEvent = z.infer<typeof webhookEventSchema>;
 export type WebhookPayload = z.infer<typeof webhookPayloadSchema>;
+
+export {
+  compileSchema,
+  validateAgainstSchema,
+  isFormShapedSchema,
+  SchemaCompileError,
+  TypedInputsValidationError,
+} from "./typed-inputs";

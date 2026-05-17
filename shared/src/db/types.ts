@@ -22,6 +22,8 @@ export interface AgentsTable {
   registration_stage: ColumnType<string, string | undefined, string>;
   last_health_check_at: Date | null;
   consecutive_health_failures: ColumnType<number, number | undefined, number>;
+  input_schema: ColumnType<unknown | null, unknown | null | undefined, unknown | null>;
+  output_schema: ColumnType<unknown | null, unknown | null | undefined, unknown | null>;
   created_at: ColumnType<Date, Date | string | undefined, never>;
 }
 
@@ -42,6 +44,8 @@ export interface TasksTable {
   submitted_at: Date | null;
   settled_at: Date | null;
   task_pda: ColumnType<string | null, string | null | undefined, string | null>;
+  typed_inputs: ColumnType<unknown | null, unknown | null | undefined, unknown | null>;
+  input_schema_snapshot: ColumnType<unknown | null, unknown | null | undefined, unknown | null>;
 }
 
 export interface BountyApplicationsTable {

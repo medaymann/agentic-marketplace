@@ -28,6 +28,10 @@ export default function AgentRegisterPage() {
   const [capabilities, setCapabilities] = useState("");
   const [tags, setTags] = useState<string[]>([]);
   const [endpoint, setEndpoint] = useState("https://example.com");
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [inputSchemaText, setInputSchemaText] = useState("");
+  const [outputSchemaText, setOutputSchemaText] = useState("");
+  const [schemaError, setSchemaError] = useState<string | null>(null);
   const [step, setStep] = useState<Step>("form");
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -38,6 +42,29 @@ export default function AgentRegisterPage() {
 
     if (!publicKey || !signTransaction) {
       setError("Connect a wallet first (use the button in the header).");
+      return;
+    }
+
+    // Parse optional JSON Schemas client-side so we don't even hit the server
+    // if the JSON is broken.
+    let parsedInputSchema: unknown | null = null;
+    let parsedOutputSchema: unknown | null = null;
+    setSchemaError(null);
+    try {
+      if (inputSchemaText.trim()) parsedInputSchema = JSON.parse(inputSchemaText);
+      if (outputSchemaText.trim()) parsedOutputSchema = JSON.parse(outputSchemaText);
+    } catch (e) {
+      setSchemaError(
+        "Schema JSON is invalid: " + (e instanceof Error ? e.message : String(e)),
+      );
+      return;
+    }
+    if (
+      parsedInputSchema &&
+      (typeof parsedInputSchema !== "object" ||
+        (parsedInputSchema as { type?: unknown }).type !== "object")
+    ) {
+      setSchemaError('inputSchema must be a JSON object with top-level "type": "object".');
       return;
     }
 
@@ -90,6 +117,8 @@ export default function AgentRegisterPage() {
           capabilityTags: tags,
           endpointUrl: endpoint,
           supportedCurrencies: ["SOL"],
+          inputSchema: parsedInputSchema ?? undefined,
+          outputSchema: parsedOutputSchema ?? undefined,
         }),
       });
       const json = await res.json();
@@ -219,6 +248,62 @@ export default function AgentRegisterPage() {
             disabled={busy}
           />
         </Field>
+
+        <div className="space-y-2">
+          <button
+            type="button"
+            onClick={() => setShowAdvanced((v) => !v)}
+            className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground hover:text-foreground"
+          >
+            {showAdvanced ? "▾" : "▸"} Advanced — typed task inputs
+          </button>
+
+          {showAdvanced && (
+            <div className="space-y-4 rounded-lg border border-border/60 bg-card/30 p-4">
+              <p className="text-xs text-muted-foreground">
+                Declare a JSON Schema for the inputs a poster must supply when
+                assigning a <strong>direct</strong> task to you. When set, the
+                post-task form renders a typed form against this schema and
+                rejects malformed submissions before any SOL is escrowed.
+                Optional — leave blank to keep the generic free-text form.
+              </p>
+
+              <Field
+                label="Input schema (JSON Schema)"
+                hint='Must be an object with top-level "type": "object".'
+              >
+                <textarea
+                  value={inputSchemaText}
+                  onChange={(e) => setInputSchemaText(e.target.value)}
+                  rows={8}
+                  placeholder={`{\n  "type": "object",\n  "required": ["url"],\n  "properties": {\n    "url": { "type": "string", "format": "uri" },\n    "maxPages": { "type": "integer", "minimum": 1, "maximum": 50 }\n  }\n}`}
+                  className="form-input resize-none font-mono text-xs"
+                  disabled={busy}
+                />
+              </Field>
+
+              <Field
+                label="Output schema (JSON Schema)"
+                hint="Optional. Used by the judge to validate the deliverable's shape."
+              >
+                <textarea
+                  value={outputSchemaText}
+                  onChange={(e) => setOutputSchemaText(e.target.value)}
+                  rows={6}
+                  placeholder={`{\n  "type": "object",\n  "required": ["csvUrl", "rowCount"],\n  "properties": {\n    "csvUrl": { "type": "string", "format": "uri" },\n    "rowCount": { "type": "integer" }\n  }\n}`}
+                  className="form-input resize-none font-mono text-xs"
+                  disabled={busy}
+                />
+              </Field>
+
+              {schemaError && (
+                <div className="rounded-lg border border-red-500/40 bg-red-500/10 p-3 text-xs text-red-300">
+                  {schemaError}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
 
         {!publicKey && (
           <div

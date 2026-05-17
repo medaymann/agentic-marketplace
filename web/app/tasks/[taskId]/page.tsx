@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState, use } from "react";
 import Link from "next/link";
 import { useWallet } from "@solana/wallet-adapter-react";
+import { ArrowLeft } from "lucide-react";
 import { useTxSubmit } from "../../../lib/useTxSubmit";
 import {
   formatAmount,
@@ -28,6 +29,8 @@ type TaskDetail = {
     poster_wallet: string;
     assigned_agent: string | null;
     created_at: string;
+    typed_inputs: Record<string, unknown> | null;
+    input_schema_snapshot: { properties?: Record<string, { description?: string }> } | null;
   };
   applications: Array<{
     id: string;
@@ -96,18 +99,27 @@ export default function TaskDetailPage({ params }: { params: Promise<{ taskId: s
 
   if (error) {
     return (
-      <div className="max-w-3xl mx-auto">
-        <Link href="/bounties" className="text-blue-400 hover:text-blue-300 text-sm">
-          ← Back to bounties
+      <main className="mx-auto max-w-3xl px-6 py-12">
+        <Link
+          href="/bounties"
+          className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <ArrowLeft className="h-4 w-4" /> Back to bounties
         </Link>
-        <div className="mt-4 bg-red-500/10 border border-red-500/40 text-red-300 rounded-lg p-4">
+        <div className="mt-4 rounded-lg border border-red-500/40 bg-red-500/10 p-4 text-red-300">
           {error}
         </div>
-      </div>
+      </main>
     );
   }
 
-  if (!data) return <p className="text-gray-500">Loading…</p>;
+  if (!data) {
+    return (
+      <main className="mx-auto max-w-3xl px-6 py-12">
+        <p className="text-sm text-muted-foreground">Loading…</p>
+      </main>
+    );
+  }
 
   const { task, applications, deliverable, verdict, dispute, settlements } = data;
 
@@ -147,45 +159,62 @@ export default function TaskDetailPage({ params }: { params: Promise<{ taskId: s
           body: JSON.stringify({ txSignature: sig }),
         });
       }
-      setActionStatus("Confirmed ✓");
+      setActionStatus("Confirmed");
     } else {
-      setActionStatus("Done ✓");
+      setActionStatus("Done");
     }
     await refresh();
   }
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
-      <Link href="/bounties" className="text-blue-400 hover:text-blue-300 text-sm">
-        ← Back to bounties
+    <main className="mx-auto max-w-3xl px-6 py-12 space-y-6">
+      <Link
+        href="/bounties"
+        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+      >
+        <ArrowLeft className="h-4 w-4" /> Back to bounties
       </Link>
 
-      <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
+      <div className="rounded-2xl border border-border bg-card/40 p-6 backdrop-blur-sm">
         <div className="flex items-start justify-between flex-wrap gap-3">
-          <div>
+          <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className={`text-xs px-2 py-0.5 rounded border ${statusBadgeColor(task.status)}`}>
+              <span
+                className={`text-xs px-2 py-0.5 rounded border ${statusBadgeColor(task.status)}`}
+              >
                 {task.status}
               </span>
-              <span className="text-xs text-gray-500 capitalize">{task.mode} mode</span>
-              {isPoster && <span className="text-xs text-blue-300">you posted this</span>}
-              {isAssignedAgent && <span className="text-xs text-emerald-300">assigned to you</span>}
+              <span className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
+                {task.mode} mode
+              </span>
+              {isPoster && (
+                <span className="font-mono text-[11px] uppercase tracking-wider" style={{ color: "#A978EB" }}>
+                  · you posted this
+                </span>
+              )}
+              {isAssignedAgent && (
+                <span className="font-mono text-[11px] uppercase tracking-wider" style={{ color: "#A978EB" }}>
+                  · assigned to you
+                </span>
+              )}
             </div>
-            <h1 className="text-3xl font-bold tracking-tight mt-2">{task.title}</h1>
+            <h1 className="mt-3 text-3xl font-semibold tracking-tight">{task.title}</h1>
           </div>
           <div className="text-right">
-            <div className="text-2xl font-mono font-bold text-blue-300">
+            <div className="font-mono text-2xl font-semibold text-transparent bg-clip-text bg-gradient-to-r from-[#A978EB] to-[#DA5BCB]">
               {formatAmount(task.amount, task.currency)}
             </div>
-            <div className="text-xs text-gray-500 mt-1">
+            <div className="mt-1 font-mono text-xs text-muted-foreground">
               {formatRelativeDeadline(task.deadline)}
             </div>
           </div>
         </div>
 
-        <p className="text-gray-300 whitespace-pre-wrap mt-4">{task.description}</p>
+        <p className="mt-4 whitespace-pre-wrap text-sm text-foreground/90 leading-relaxed">
+          {task.description}
+        </p>
 
-        <div className="mt-5 pt-5 border-t border-gray-800 grid grid-cols-2 gap-4 text-sm">
+        <div className="mt-6 grid grid-cols-2 gap-4 border-t border-border pt-5 text-sm">
           <Meta label="Poster" value={shortenWallet(task.poster_wallet)} />
           <Meta label="Assigned agent" value={shortenWallet(task.assigned_agent)} />
           <Meta label="Created" value={formatDate(task.created_at)} />
@@ -193,15 +222,43 @@ export default function TaskDetailPage({ params }: { params: Promise<{ taskId: s
         </div>
       </div>
 
+      {task.typed_inputs && Object.keys(task.typed_inputs).length > 0 && (
+        <Section title="Agent inputs">
+          <dl className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
+            {Object.entries(task.typed_inputs).map(([k, v]) => {
+              const desc =
+                task.input_schema_snapshot?.properties?.[k]?.description ?? null;
+              return (
+                <div
+                  key={k}
+                  className="rounded-md border border-border/60 bg-card/40 p-3"
+                >
+                  <dt className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
+                    {k}
+                    {desc ? <span className="ml-2 normal-case text-[10px] text-muted-foreground/70">{desc}</span> : null}
+                  </dt>
+                  <dd className="mt-1 break-all font-mono text-sm text-foreground/90">
+                    {v === null || v === undefined
+                      ? "—"
+                      : typeof v === "object"
+                        ? JSON.stringify(v)
+                        : String(v)}
+                  </dd>
+                </div>
+              );
+            })}
+          </dl>
+        </Section>
+      )}
+
       <Section title="Acceptance criteria">
-        <ol className="space-y-2 list-decimal list-inside text-gray-300 text-sm">
+        <ol className="list-decimal list-inside space-y-2 text-sm text-foreground/90">
           {task.acceptance_criteria.map((c, i) => (
             <li key={i}>{c}</li>
           ))}
         </ol>
       </Section>
 
-      {/* Action panel renders depending on task state + viewer */}
       <ActionPanel
         wallet={wallet}
         isPoster={isPoster}
@@ -263,7 +320,7 @@ export default function TaskDetailPage({ params }: { params: Promise<{ taskId: s
             });
             const json = await res.json();
             if (!res.ok) throw new Error(json.error?.message ?? "Judge failed");
-            setActionStatus("Verdict in ✓");
+            setActionStatus("Verdict in");
             await refresh();
           })
         }
@@ -273,33 +330,35 @@ export default function TaskDetailPage({ params }: { params: Promise<{ taskId: s
         <Section title={`Applications (${applications.length})`}>
           <div className="space-y-3">
             {applications.map((a) => (
-              <div key={a.id} className="bg-gray-950 border border-gray-800 rounded-lg p-4">
+              <div key={a.id} className="rounded-lg border border-border bg-card/40 p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-semibold text-white">
+                      <span className="font-semibold text-foreground">
                         {a.agent_name ?? shortenWallet(a.agent_wallet)}
                       </span>
-                      <span className={`text-xs px-2 py-0.5 rounded border ${statusBadgeColor(a.status)}`}>
+                      <span
+                        className={`text-xs px-2 py-0.5 rounded border ${statusBadgeColor(a.status)}`}
+                      >
                         {a.status}
                       </span>
                     </div>
-                    <span className="text-xs font-mono text-gray-500">{shortenWallet(a.agent_wallet)}</span>
-                    {a.agent_joined_at && (
-                      <span className="text-xs text-gray-500 ml-2">
-                        · member since {new Date(a.agent_joined_at).toLocaleDateString("en-US", { month: "short", year: "numeric" })}
-                      </span>
-                    )}
+                    <span className="font-mono text-xs text-muted-foreground">
+                      {shortenWallet(a.agent_wallet)}
+                    </span>
                     {a.agent_capability_tags.length > 0 && (
-                      <div className="flex flex-wrap gap-1 mt-2">
+                      <div className="mt-2 flex flex-wrap gap-1">
                         {a.agent_capability_tags.map((tag) => (
-                          <span key={tag} className="text-xs px-2 py-0.5 bg-gray-800 text-gray-400 rounded-full">
+                          <span
+                            key={tag}
+                            className="rounded-md border border-border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground"
+                          >
                             {tag}
                           </span>
                         ))}
                       </div>
                     )}
-                    <p className="text-sm text-gray-300 mt-3 italic">"{a.message}"</p>
+                    <p className="mt-3 text-sm italic text-foreground/90">&ldquo;{a.message}&rdquo;</p>
                   </div>
                   {isPoster && task.status === "created" && a.status === "pending" && (
                     <button
@@ -313,7 +372,7 @@ export default function TaskDetailPage({ params }: { params: Promise<{ taskId: s
                         )
                       }
                       disabled={actionBusy}
-                      className="shrink-0 text-xs px-3 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-800 text-white rounded transition"
+                      className="bg-brand-gradient shrink-0 rounded-md px-3 py-1.5 text-xs font-medium text-white shadow-violet/20 transition-all duration-200 hover:scale-105 disabled:opacity-40"
                     >
                       Accept
                     </button>
@@ -330,16 +389,18 @@ export default function TaskDetailPage({ params }: { params: Promise<{ taskId: s
           {deliverable.content_text && (
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-xs text-gray-500 font-mono">content.csv</span>
+                <span className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
+                  content.csv
+                </span>
                 <a
                   href={`data:text/csv;charset=utf-8,${encodeURIComponent(deliverable.content_text)}`}
                   download="deliverable.csv"
-                  className="text-xs px-3 py-1 bg-blue-600 hover:bg-blue-500 text-white rounded transition"
+                  className="rounded-md border border-border bg-card/60 px-3 py-1 text-xs font-medium text-foreground transition-colors hover:border-foreground/30"
                 >
                   Download CSV
                 </a>
               </div>
-              <pre className="bg-gray-950 border border-gray-800 rounded-md p-3 text-sm whitespace-pre-wrap text-gray-300 max-h-64 overflow-auto">
+              <pre className="max-h-64 overflow-auto whitespace-pre-wrap rounded-md border border-border bg-card/60 p-3 text-sm text-foreground/90">
                 {deliverable.content_text}
               </pre>
             </div>
@@ -348,7 +409,12 @@ export default function TaskDetailPage({ params }: { params: Promise<{ taskId: s
             <ul className="mt-2 space-y-1 text-sm">
               {deliverable.file_urls.map((u) => (
                 <li key={u}>
-                  <a href={u} target="_blank" rel="noreferrer" className="text-blue-400 hover:underline">
+                  <a
+                    href={u}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-transparent bg-clip-text bg-gradient-to-r from-[#A978EB] to-[#DA5BCB] hover:underline"
+                  >
                     {u}
                   </a>
                 </li>
@@ -356,7 +422,7 @@ export default function TaskDetailPage({ params }: { params: Promise<{ taskId: s
             </ul>
           )}
           {deliverable.submitted_at && (
-            <p className="text-xs text-gray-500 mt-2">
+            <p className="mt-2 font-mono text-[11px] text-muted-foreground">
               Submitted {formatDate(deliverable.submitted_at)}
             </p>
           )}
@@ -365,7 +431,7 @@ export default function TaskDetailPage({ params }: { params: Promise<{ taskId: s
 
       {verdict && (
         <Section title="AI judge verdict">
-          <div className="flex items-center gap-2 mb-2">
+          <div className="mb-2 flex items-center gap-2">
             <span
               className={`px-3 py-1 rounded text-sm font-semibold uppercase ${
                 verdict.verdict === "pass"
@@ -378,30 +444,30 @@ export default function TaskDetailPage({ params }: { params: Promise<{ taskId: s
               {verdict.verdict}
             </span>
             {verdict.confidence && (
-              <span className="text-xs text-gray-500">
+              <span className="font-mono text-xs text-muted-foreground">
                 confidence {(Number(verdict.confidence) * 100).toFixed(0)}%
               </span>
             )}
           </div>
           {verdict.reasoning && (
-            <p className="text-sm text-gray-300 whitespace-pre-wrap">{verdict.reasoning}</p>
+            <p className="whitespace-pre-wrap text-sm text-foreground/90">{verdict.reasoning}</p>
           )}
         </Section>
       )}
 
       {dispute && (
         <Section title="Dispute">
-          <p className="text-sm text-gray-300">
-            <span className="text-gray-500">Poster:</span> {dispute.reason}
+          <p className="text-sm text-foreground/90">
+            <span className="text-muted-foreground">Poster:</span> {dispute.reason}
           </p>
           {dispute.agent_response && (
-            <p className="text-sm text-gray-300 mt-2">
-              <span className="text-gray-500">Agent response:</span> {dispute.agent_response}
+            <p className="mt-2 text-sm text-foreground/90">
+              <span className="text-muted-foreground">Agent response:</span> {dispute.agent_response}
             </p>
           )}
           {dispute.ruling && (
-            <p className="text-sm mt-2">
-              <span className="text-gray-500">Ruling:</span>{" "}
+            <p className="mt-2 text-sm">
+              <span className="text-muted-foreground">Ruling:</span>{" "}
               <span className="font-semibold capitalize">{dispute.ruling}</span>
             </p>
           )}
@@ -412,15 +478,20 @@ export default function TaskDetailPage({ params }: { params: Promise<{ taskId: s
         <Section title="On-chain settlements">
           <div className="space-y-3">
             {settlements.map((s) => (
-              <div key={s.txSignature + s.kind} className="bg-gray-950 border border-gray-800 rounded-lg p-3">
-                <div className="flex items-center justify-between flex-wrap gap-2">
+              <div
+                key={s.txSignature + s.kind}
+                className="rounded-lg border border-border bg-card/40 p-3"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
-                    <span className="text-xs uppercase tracking-wider text-gray-500 mr-2">{s.kind}</span>
-                    <span className="text-sm font-mono text-gray-300">
+                    <span className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground mr-2">
+                      {s.kind}
+                    </span>
+                    <span className="font-mono text-sm text-foreground">
                       {s.recipientWallet.slice(0, 6)}…{s.recipientWallet.slice(-4)}
                     </span>
                   </div>
-                  <span className="text-sm font-mono font-semibold text-emerald-300">
+                  <span className="font-mono text-sm font-semibold text-emerald-300">
                     {s.currency === "SOL"
                       ? (Number(s.amount) / 1e9).toFixed(4) + " SOL"
                       : (Number(s.amount) / 1e6).toFixed(2) + " USDC"}
@@ -430,7 +501,7 @@ export default function TaskDetailPage({ params }: { params: Promise<{ taskId: s
                   href={`https://explorer.solana.com/tx/${s.txSignature}?cluster=devnet`}
                   target="_blank"
                   rel="noreferrer"
-                  className="mt-2 block text-xs text-blue-400 hover:text-blue-300 hover:underline font-mono truncate"
+                  className="mt-2 block truncate font-mono text-xs text-muted-foreground hover:text-foreground transition-colors"
                 >
                   {s.txSignature}
                 </a>
@@ -439,7 +510,7 @@ export default function TaskDetailPage({ params }: { params: Promise<{ taskId: s
           </div>
         </Section>
       )}
-    </div>
+    </main>
   );
 }
 
@@ -482,7 +553,7 @@ function ActionPanel({
   if (!wallet) {
     return (
       <Section title="Actions">
-        <p className="text-sm text-gray-400">
+        <p className="text-sm text-muted-foreground">
           Connect your wallet (header) to apply, submit a deliverable, approve, or dispute.
         </p>
       </Section>
@@ -491,10 +562,7 @@ function ActionPanel({
 
   const alreadyApplied = applications.some((a) => a.agent_wallet === wallet);
   const canApply =
-    task.mode === "bounty" &&
-    task.status === "created" &&
-    !isPoster &&
-    !alreadyApplied;
+    task.mode === "bounty" && task.status === "created" && !isPoster && !alreadyApplied;
   const canSubmit = isAssignedAgent && task.status === "assigned";
   const canApprove = isPoster && task.status === "submitted";
   const canDispute = isPoster && task.status === "submitted";
@@ -506,8 +574,9 @@ function ActionPanel({
   return (
     <Section title="Actions">
       {!showAny && (
-        <p className="text-sm text-gray-500">
-          Nothing to do here right now — task is in <code>{task.status}</code> state.
+        <p className="text-sm text-muted-foreground">
+          Nothing to do here right now — task is in <code className="font-mono">{task.status}</code>{" "}
+          state.
           {alreadyApplied && " You've already applied."}
         </p>
       )}
@@ -519,21 +588,20 @@ function ActionPanel({
             onChange={(e) => setApplyMsg(e.target.value)}
             rows={3}
             placeholder="Why you're a good fit and what your approach will be…"
-            className="w-full bg-gray-950 border border-gray-800 rounded-md px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+            className="form-input resize-none"
           />
           <button
             onClick={() => onApply(applyMsg)}
             disabled={busy || applyMsg.trim().length === 0}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-800 disabled:cursor-not-allowed text-white rounded-md font-medium transition"
+            className="bg-brand-gradient inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium text-white shadow-violet/20 transition-transform duration-200 hover:scale-[1.02] disabled:opacity-40 disabled:cursor-not-allowed"
           >
             Apply to bounty
           </button>
-          <p className="text-xs text-gray-500">
-            Requires your wallet to be a registered agent. (
-            <Link href="/agents/register" className="text-blue-400 hover:underline">
+          <p className="font-mono text-[11px] text-muted-foreground">
+            Requires your wallet to be a registered agent.{" "}
+            <Link href="/agents/register" className="text-transparent bg-clip-text bg-gradient-to-r from-[#A978EB] to-[#DA5BCB] hover:underline">
               Register here
             </Link>
-            )
           </p>
         </div>
       )}
@@ -545,16 +613,16 @@ function ActionPanel({
             onChange={(e) => setDeliverableText(e.target.value)}
             rows={6}
             placeholder="Inline deliverable content. For files use external URLs (R2/S3/GitHub)."
-            className="w-full bg-gray-950 border border-gray-800 rounded-md px-3 py-2 text-sm font-mono focus:outline-none focus:border-blue-500"
+            className="form-input resize-none font-mono"
           />
           <button
             onClick={() => onSubmit(deliverableText)}
             disabled={busy || deliverableText.trim().length === 0}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-800 disabled:cursor-not-allowed text-white rounded-md font-medium transition"
+            className="bg-brand-gradient inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium text-white shadow-violet/20 transition-transform duration-200 hover:scale-[1.02] disabled:opacity-40 disabled:cursor-not-allowed"
           >
             Submit deliverable
           </button>
-          <p className="text-xs text-gray-500">
+          <p className="font-mono text-[11px] text-muted-foreground">
             Signs an on-chain <code>submit_deliverable</code> tx and starts the 24h verification
             window. The judge runs automatically.
           </p>
@@ -566,22 +634,23 @@ function ActionPanel({
           <button
             onClick={onApprove}
             disabled={busy}
-            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-800 disabled:cursor-not-allowed text-white rounded-md font-medium transition"
+            className="inline-flex items-center gap-2 rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-500 disabled:bg-emerald-800 disabled:cursor-not-allowed"
           >
             Approve & release funds
           </button>
-          <div className="flex-1 flex gap-2">
+          <div className="flex flex-1 gap-2">
             <input
               value={disputeReason}
               onChange={(e) => setDisputeReason(e.target.value)}
               placeholder="Reason for dispute"
-              className="flex-1 bg-gray-950 border border-gray-800 rounded-md px-3 py-2 text-sm focus:outline-none focus:border-orange-500"
+              className="form-input flex-1"
             />
             {canDispute && (
               <button
                 onClick={() => onDispute(disputeReason)}
                 disabled={busy || disputeReason.trim().length === 0}
-                className="px-4 py-2 bg-orange-600 hover:bg-orange-500 disabled:bg-orange-800 disabled:cursor-not-allowed text-white rounded-md font-medium transition"
+                className="inline-flex items-center gap-2 rounded-md border px-4 py-2 text-sm font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                style={{ borderColor: "rgba(218,91,203,0.45)", color: "#DA5BCB" }}
               >
                 Dispute
               </button>
@@ -595,28 +664,34 @@ function ActionPanel({
           <button
             onClick={onRunJudge}
             disabled={busy}
-            className="px-4 py-2 bg-purple-600 hover:bg-purple-500 disabled:bg-purple-800 disabled:cursor-not-allowed text-white rounded-md font-medium transition"
+            className="inline-flex items-center gap-2 rounded-md border border-border bg-card/60 px-4 py-2 text-sm font-medium text-foreground transition-colors hover:border-foreground/30 disabled:opacity-40 disabled:cursor-not-allowed"
           >
             Run AI judge now
           </button>
-          <p className="text-xs text-gray-500 mt-1">
-            The daemon will also run the judge automatically after seeing the on-chain submit
-            event. This button is a manual trigger for demos.
+          <p className="mt-1 font-mono text-[11px] text-muted-foreground">
+            The daemon runs the judge automatically after seeing the on-chain submit event. This
+            button is a manual trigger for demos.
           </p>
         </div>
       )}
 
       {status && (
-        <div className="mt-3 bg-blue-500/10 border border-blue-500/40 text-blue-300 rounded-md p-3 text-sm flex items-center gap-2">
+        <div
+          className="mt-3 flex items-center gap-2 rounded-md border p-3 text-sm"
+          style={{ borderColor: "rgba(169,120,235,0.4)", color: "#C4A6F1", background: "rgba(169,120,235,0.05)" }}
+        >
           {busy && (
-            <span className="inline-block w-3 h-3 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+            <span
+              className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-t-transparent"
+              style={{ borderColor: "#A978EB" }}
+            />
           )}
           {status}
         </div>
       )}
 
       {error && (
-        <div className="mt-3 bg-red-500/10 border border-red-500/40 text-red-300 rounded-md p-3 text-sm">
+        <div className="mt-3 rounded-md border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-300">
           {error}
         </div>
       )}
@@ -627,17 +702,21 @@ function ActionPanel({
 function Meta({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <div className="text-xs text-gray-500">{label}</div>
-      <div className="font-mono text-gray-300">{value}</div>
+      <div className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
+        {label}
+      </div>
+      <div className="mt-1 font-mono text-sm text-foreground">{value}</div>
     </div>
   );
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
-      <h2 className="text-lg font-semibold mb-3">{title}</h2>
-      {children}
-    </div>
+    <section className="rounded-2xl border border-border bg-card/40 p-6 backdrop-blur-sm">
+      <h2 className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
+        {title}
+      </h2>
+      <div className="mt-4">{children}</div>
+    </section>
   );
 }

@@ -2,7 +2,13 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { wrap } from "@/lib/handler";
 import { serialize } from "@/lib/serialize";
-import { getLatestBlockhashWithRetry, createDirectTask, createBountyTask, getDb } from "@basira/shared";
+import {
+  getLatestBlockhashWithRetry,
+  createDirectTask,
+  createBountyTask,
+  getDb,
+  TypedInputsValidationError,
+} from "@basira/shared";
 
 export const POST = wrap(async (req: NextRequest) => {
   const body = await req.json();
@@ -24,15 +30,31 @@ export const POST = wrap(async (req: NextRequest) => {
   };
 
   let result;
-  if (input.mode === "direct") {
-    result = await createDirectTask(input, posterWallet, blockhash);
-  } else if (input.mode === "bounty") {
-    result = await createBountyTask(input, posterWallet, blockhash);
-  } else {
-    return NextResponse.json(
-      { error: { code: "validation_error", message: "mode must be 'direct' or 'bounty'" } },
-      { status: 400 },
-    );
+  try {
+    if (input.mode === "direct") {
+      result = await createDirectTask(input, posterWallet, blockhash);
+    } else if (input.mode === "bounty") {
+      result = await createBountyTask(input, posterWallet, blockhash);
+    } else {
+      return NextResponse.json(
+        { error: { code: "validation_error", message: "mode must be 'direct' or 'bounty'" } },
+        { status: 400 },
+      );
+    }
+  } catch (err) {
+    if (err instanceof TypedInputsValidationError) {
+      return NextResponse.json(
+        {
+          error: {
+            code: "typed_inputs_invalid",
+            message: err.message,
+            details: err.errors,
+          },
+        },
+        { status: 400 },
+      );
+    }
+    throw err;
   }
 
   return NextResponse.json(serialize(result));

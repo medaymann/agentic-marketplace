@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import { PublicKey } from "@solana/web3.js";
 import { taskCreateInputSchema } from "../schemas/task";
 import * as tasksDb from "../db/tasks";
+import * as agentsDb from "../db/agents";
+import { validateAgainstSchema } from "../domain/typed-inputs";
 import { getConnection } from "../solana/connection";
 import { getProgram } from "../solana/program";
 import { taskIdFromUuid } from "../solana/pdas";
@@ -34,6 +36,24 @@ export async function createDirectTask(
 ): Promise<CreateTaskResult> {
   const input = taskCreateInputSchema.parse(rawInput);
   if (input.mode !== "direct") throw new Error("Expected direct mode task");
+
+  const agent = await agentsDb.getAgentByWallet(input.assignedAgent);
+  if (!agent) throw new Error(`Assigned agent not registered: ${input.assignedAgent}`);
+
+  // If the agent declared an input schema, the poster MUST supply matching
+  // typed inputs. If the agent has no schema, typedInputs is ignored.
+  let typedInputs: unknown | null = null;
+  let inputSchemaSnapshot: unknown | null = null;
+  if (agent.input_schema) {
+    if (!input.typedInputs) {
+      throw new Error(
+        "Agent declares an input schema; typedInputs is required to assign a task",
+      );
+    }
+    validateAgainstSchema(agent.input_schema, input.typedInputs);
+    typedInputs = input.typedInputs;
+    inputSchemaSnapshot = agent.input_schema;
+  }
 
   const taskId = randomUUID();
   const poster = new PublicKey(posterWallet);
@@ -75,6 +95,8 @@ export async function createDirectTask(
     deadline: new Date(Number(input.deadline) * 1000),
     status: "assigned",
     taskPda: result.taskAccount.toBase58(),
+    typedInputs,
+    inputSchemaSnapshot,
   });
 
   return { unsignedTx: result.tx, taskId, taskAccount: result.taskAccount, vault: result.vault };
