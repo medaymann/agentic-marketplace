@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 use anchor_lang::system_program;
 use crate::state::*;
-use crate::error::BasiraError;
+use crate::errors::BasiraError;
 use crate::constants::{FEE_BPS, AUTO_RELEASE_SECONDS, pubkeys::TREASURY, pubkeys::ARBITRATOR_KEY};
 
 #[derive(Accounts)]

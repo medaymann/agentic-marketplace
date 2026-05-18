@@ -21,7 +21,7 @@ const envSchema = z.object({
   PROGRAM_ID: z.string().min(32, "PROGRAM_ID must be set"),
   KEEPER_KEYPAIR_PATH: z.string().min(1),
   ARBITRATOR_KEYPAIR_PATH: z.string().min(1),
-  LLM_PROVIDER: z.enum(["mock", "anthropic", "gemini"]).default("mock"),
+  LLM_PROVIDER: z.enum(["mock", "anthropic", "gemini", "groq"]).default("mock"),
   LLM_API_KEY: z.string().optional(),
   LOG_LEVEL: z
     .enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"])
@@ -44,7 +44,7 @@ export function getEnv(): Env {
     throw new Error(`Invalid daemon environment:\n${issues}`);
   }
   if (
-    (parsed.data.LLM_PROVIDER === "anthropic" || parsed.data.LLM_PROVIDER === "gemini") &&
+    (parsed.data.LLM_PROVIDER === "anthropic" || parsed.data.LLM_PROVIDER === "gemini" || parsed.data.LLM_PROVIDER === "groq") &&
     !parsed.data.LLM_API_KEY
   ) {
     throw new Error(`LLM_PROVIDER=${parsed.data.LLM_PROVIDER} requires LLM_API_KEY`);
