@@ -146,10 +146,8 @@ function NewTaskInner() {
       setStatusMsg("Building transaction…");
       const res = await fetch("/api/v1/tasks", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Poster-Wallet": publicKey.toBase58(),
-        },
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify(body),
       });
       const json = await res.json();

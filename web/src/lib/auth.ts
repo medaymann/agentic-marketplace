@@ -40,6 +40,29 @@ export async function requireApiKey(req: NextRequest): Promise<AuthContext> {
 }
 
 /**
+ * Either-or auth: accepts a SIWS cookie (browser flow) OR an Authorization
+ * Bearer API key (autonomous agent flow). Throws UnauthorizedError if neither
+ * is present and valid. Use for routes that may be hit by both surfaces.
+ */
+export async function requireSiwsOrApiKey(
+  req: NextRequest,
+): Promise<AuthContext> {
+  const cookie = req.cookies.get(SESSION_COOKIE)?.value;
+  if (cookie) {
+    try {
+      return await requireSiws(req);
+    } catch {
+      // fall through to API key
+    }
+  }
+  const header = req.headers.get("authorization");
+  if (header) return requireApiKey(req);
+  throw new UnauthorizedError(
+    "Authenticate with a session cookie or Authorization: Bearer <apiKey>",
+  );
+}
+
+/**
  * Optional auth: returns the wallet if either credential is present and valid,
  * null otherwise. Never throws on missing credentials; only on malformed ones.
  */

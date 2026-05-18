@@ -7,7 +7,7 @@ import { registry } from "@/lib/openapi";
 import { SESSION_COOKIE_NAME } from "@/lib/auth";
 import { z } from "zod";
 
-const SESSION_TTL_SECONDS = 24 * 60 * 60;
+const SESSION_TTL_SECONDS = 7 * 24 * 60 * 60;
 
 export const POST = wrap(async (req: NextRequest) => {
   const body = siwsVerifyInputSchema.safeParse(await req.json());

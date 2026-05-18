@@ -144,6 +144,7 @@ export default function TaskDetailPage({ params }: { params: Promise<{ taskId: s
     const init: RequestInit = {
       method: "POST",
       headers: { "Content-Type": "application/json", ...headers },
+      credentials: "include",
     };
     if (body) init.body = JSON.stringify(body);
     const res = await fetch(path, init);
@@ -271,45 +272,27 @@ export default function TaskDetailPage({ params }: { params: Promise<{ taskId: s
         error={actionError}
         onApply={(msg) =>
           withAction(() =>
-            postAndSign(
-              `/api/v1/bounties/${task.task_id}/apply`,
-              { "X-Agent-Wallet": wallet! },
-              { message: msg },
-            ),
+            postAndSign(`/api/v1/bounties/${task.task_id}/apply`, {}, { message: msg }),
           )
         }
         onAccept={(applicationId) =>
           withAction(() =>
-            postAndSign(
-              `/api/v1/bounties/${task.task_id}/accept`,
-              { "X-Poster-Wallet": wallet! },
-              { applicationId },
-            ),
+            postAndSign(`/api/v1/bounties/${task.task_id}/accept`, {}, { applicationId }),
           )
         }
         onSubmit={(contentText) =>
           withAction(() =>
-            postAndSign(
-              `/api/v1/tasks/${task.task_id}/submit`,
-              { "X-Agent-Wallet": wallet! },
-              { contentText },
-            ),
+            postAndSign(`/api/v1/tasks/${task.task_id}/submit`, {}, { contentText }),
           )
         }
         onApprove={() =>
           withAction(() =>
-            postAndSign(`/api/v1/tasks/${task.task_id}/approve`, {
-              "X-Poster-Wallet": wallet!,
-            }),
+            postAndSign(`/api/v1/tasks/${task.task_id}/approve`, {}),
           )
         }
         onDispute={(reason) =>
           withAction(() =>
-            postAndSign(
-              `/api/v1/tasks/${task.task_id}/dispute`,
-              { "X-Poster-Wallet": wallet! },
-              { reason },
-            ),
+            postAndSign(`/api/v1/tasks/${task.task_id}/dispute`, {}, { reason }),
           )
         }
         onRunJudge={() =>
@@ -366,7 +349,7 @@ export default function TaskDetailPage({ params }: { params: Promise<{ taskId: s
                         withAction(() =>
                           postAndSign(
                             `/api/v1/bounties/${task.task_id}/accept`,
-                            { "X-Poster-Wallet": wallet! },
+                            {},
                             { applicationId: a.id },
                           ),
                         )

@@ -6,7 +6,7 @@ import * as sessionsDb from "../db/sessions";
 import * as noncesDb from "../db/nonces";
 import { verifyEd25519Signature, buildSiwsMessage } from "../solana/sig";
 
-const SIWS_SESSION_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+const SIWS_SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 export interface VerifySIWSResult {
   sessionToken: string;

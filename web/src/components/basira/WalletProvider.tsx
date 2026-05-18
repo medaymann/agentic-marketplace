@@ -5,6 +5,7 @@ import { ConnectionProvider, WalletProvider as SolanaWalletProvider } from "@sol
 import { WalletModalProvider } from "@solana/wallet-adapter-react-ui";
 import { PhantomWalletAdapter, SolflareWalletAdapter } from "@solana/wallet-adapter-wallets";
 import "@solana/wallet-adapter-react-ui/styles.css";
+import { SiwsAutoSignIn } from "./SiwsAutoSignIn";
 
 export function WalletProvider({ children }: { children: React.ReactNode }) {
   const endpoint = process.env.NEXT_PUBLIC_SOLANA_RPC || "https://api.devnet.solana.com";
@@ -20,7 +21,10 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   return (
     <ConnectionProvider endpoint={endpoint}>
       <SolanaWalletProvider wallets={wallets} autoConnect onError={() => {}}>
-        <WalletModalProvider>{children}</WalletModalProvider>
+        <WalletModalProvider>
+          <SiwsAutoSignIn />
+          {children}
+        </WalletModalProvider>
       </SolanaWalletProvider>
     </ConnectionProvider>
   );

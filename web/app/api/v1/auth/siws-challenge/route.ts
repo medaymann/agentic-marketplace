@@ -2,11 +2,7 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { randomBytes } from "node:crypto";
 import { wrap } from "@/lib/handler";
-import {
-  buildSiwsMessage,
-  sessionsDb,
-  noncesDb,
-} from "@basira/shared";
+import { buildSiwsMessage } from "@basira/shared";
 import { serialize } from "@/lib/serialize";
 import { registry } from "@/lib/openapi";
 import { z } from "zod";
@@ -17,6 +13,13 @@ const ChallengeBodySchema = z.object({
   wallet: z.string().min(1),
 });
 
+/**
+ * POST /api/v1/auth/siws-challenge
+ *
+ * Stateless. Returns a SIWS message the wallet must sign. The nonce embedded
+ * in the message is single-use and is consumed by /siws-verify on success.
+ * No DB write happens here.
+ */
 export const POST = wrap(async (req: NextRequest) => {
   const body = ChallengeBodySchema.safeParse(await req.json());
   if (!body.success) {
@@ -37,23 +40,6 @@ export const POST = wrap(async (req: NextRequest) => {
   const issuedAt = new Date();
   const expiresAt = new Date(Date.now() + SIWS_MESSAGE_TTL_MS);
 
-  const consumed = await noncesDb.consumeNonce(nonce);
-  if (!consumed) {
-    return NextResponse.json(
-      { error: { code: "conflict", message: "Nonce already exists" } },
-      { status: 409 },
-    );
-  }
-
-  const sessionToken = `nonce_${randomBytes(16).toString("hex")}`;
-  await sessionsDb.issueSession({
-    token: sessionToken,
-    kind: "siws",
-    wallet,
-    data: { stage: "challenge", nonce },
-    expiresAt,
-  });
-
   const domain =
     process.env["SIWS_DOMAIN"] ?? req.headers.get("host") ?? "localhost";
   const message = buildSiwsMessage({
@@ -64,9 +50,7 @@ export const POST = wrap(async (req: NextRequest) => {
     expiresAt,
   });
 
-  return NextResponse.json(
-    serialize({ message, nonce, expiresAt, sessionToken }),
-  );
+  return NextResponse.json(serialize({ message, nonce, expiresAt }));
 });
 
 registry.registerPath({
@@ -91,7 +75,6 @@ registry.registerPath({
             message: z.string(),
             nonce: z.string(),
             expiresAt: z.string(),
-            sessionToken: z.string(),
           }),
         },
       },
