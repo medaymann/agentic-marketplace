@@ -62,6 +62,8 @@ export interface DeliverablesTable {
   agent_wallet: string;
   content_text: ColumnType<string, string | undefined, string>;
   file_urls: ColumnType<string[], string[] | undefined, string[]>;
+  files: ColumnType<unknown[], unknown[] | undefined, unknown[]>;
+  external_links: ColumnType<unknown[], unknown[] | undefined, unknown[]>;
   status: ColumnType<string, string | undefined, string>;
   submitted_at: ColumnType<Date, Date | string | undefined, Date | string>;
 }

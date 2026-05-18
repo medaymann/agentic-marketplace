@@ -7,6 +7,7 @@ import { ArrowLeft } from "lucide-react";
 import { useTxSubmit } from "@/lib/useTxSubmit";
 import {
   formatAmount,
+  formatBytes,
   formatDate,
   formatRelativeDeadline,
   shortenWallet,
@@ -45,6 +46,17 @@ type TaskDetail = {
   deliverable: {
     content_text: string | null;
     file_urls: string[] | null;
+    files:
+      | Array<{
+          key: string;
+          name: string;
+          contentType: string;
+          sizeBytes: number;
+          sha256: string;
+          finalUrl: string;
+        }>
+      | null;
+    external_links: Array<{ url: string; label?: string }> | null;
     submitted_at: string | null;
   } | null;
   verdict: {
@@ -280,9 +292,13 @@ export default function TaskDetailPage({ params }: { params: Promise<{ taskId: s
             postAndSign(`/api/v1/bounties/${task.task_id}/accept`, {}, { applicationId }),
           )
         }
-        onSubmit={(contentText) =>
+        onSubmit={(contentText, files, externalLinks) =>
           withAction(() =>
-            postAndSign(`/api/v1/tasks/${task.task_id}/submit`, {}, { contentText }),
+            postAndSign(
+              `/api/v1/tasks/${task.task_id}/submit`,
+              {},
+              { contentText, files, externalLinks },
+            ),
           )
         }
         onApprove={() =>
@@ -371,41 +387,94 @@ export default function TaskDetailPage({ params }: { params: Promise<{ taskId: s
         <Section title="Deliverable">
           {deliverable.content_text && (
             <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
-                  content.csv
-                </span>
-                <a
-                  href={`data:text/csv;charset=utf-8,${encodeURIComponent(deliverable.content_text)}`}
-                  download="deliverable.csv"
-                  className="rounded-md border border-border bg-card/60 px-3 py-1 text-xs font-medium text-foreground transition-colors hover:border-foreground/30"
-                >
-                  Download CSV
-                </a>
-              </div>
+              <span className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
+                Write-up
+              </span>
               <pre className="max-h-64 overflow-auto whitespace-pre-wrap rounded-md border border-border bg-card/60 p-3 text-sm text-foreground/90">
                 {deliverable.content_text}
               </pre>
             </div>
           )}
-          {deliverable.file_urls && deliverable.file_urls.length > 0 && (
-            <ul className="mt-2 space-y-1 text-sm">
-              {deliverable.file_urls.map((u) => (
-                <li key={u}>
-                  <a
-                    href={u}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-transparent bg-clip-text bg-gradient-to-r from-[#A978EB] to-[#DA5BCB] hover:underline"
-                  >
-                    {u}
-                  </a>
-                </li>
-              ))}
-            </ul>
+          {deliverable.files && deliverable.files.length > 0 && (
+            <div className="mt-3 space-y-2">
+              <span className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
+                Files ({deliverable.files.length})
+              </span>
+              <div className="overflow-hidden rounded-md border border-border">
+                <table className="w-full text-sm">
+                  <thead className="bg-card/60 text-left font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                    <tr>
+                      <th className="px-3 py-2">Name</th>
+                      <th className="px-3 py-2">Size</th>
+                      <th className="px-3 py-2">sha256</th>
+                      <th className="px-3 py-2"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {deliverable.files.map((f) => (
+                      <tr key={f.key} className="border-t border-border/60">
+                        <td className="px-3 py-2 font-mono text-xs">{f.name}</td>
+                        <td className="px-3 py-2 font-mono text-xs text-muted-foreground">
+                          {formatBytes(f.sizeBytes)}
+                        </td>
+                        <td className="px-3 py-2 font-mono text-[10px] text-muted-foreground">
+                          {f.sha256.slice(0, 12)}…
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              const res = await fetch(
+                                `/api/v1/tasks/${task.task_id}/deliverable/download-url`,
+                                {
+                                  method: "POST",
+                                  headers: { "Content-Type": "application/json" },
+                                  credentials: "include",
+                                  body: JSON.stringify({ key: f.key }),
+                                },
+                              );
+                              const json = await res.json();
+                              if (!res.ok) {
+                                alert(json.error?.message ?? "Download failed");
+                                return;
+                              }
+                              window.open(json.url, "_blank", "noopener,noreferrer");
+                            }}
+                            className="rounded-md border border-border bg-card/60 px-3 py-1 text-xs font-medium transition-colors hover:border-foreground/30"
+                          >
+                            Download
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+          {deliverable.external_links && deliverable.external_links.length > 0 && (
+            <div className="mt-3 space-y-2">
+              <span className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
+                External links
+              </span>
+              <ul className="space-y-1 text-sm">
+                {deliverable.external_links.map((l) => (
+                  <li key={l.url}>
+                    <a
+                      href={l.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-transparent bg-clip-text bg-gradient-to-r from-[#A978EB] to-[#DA5BCB] hover:underline"
+                    >
+                      {l.label ? `${l.label} — ${l.url}` : l.url}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
           {deliverable.submitted_at && (
-            <p className="mt-2 font-mono text-[11px] text-muted-foreground">
+            <p className="mt-3 font-mono text-[11px] text-muted-foreground">
               Submitted {formatDate(deliverable.submitted_at)}
             </p>
           )}
@@ -497,6 +566,44 @@ export default function TaskDetailPage({ params }: { params: Promise<{ taskId: s
   );
 }
 
+// One row in the agent's drag-drop file picker. Tracks the file from "picked"
+// through "hashed → uploading → done" so the submit button can wait for every
+// row to be `done` before posting.
+type UploadEntry = {
+  localId: string;
+  name: string;
+  contentType: string;
+  sizeBytes: number;
+  sha256?: string;
+  key?: string;
+  finalUrl?: string;
+  progress: number; // 0..100
+  status: "preparing" | "hashing" | "uploading" | "done" | "error";
+  error?: string;
+};
+
+async function sha256Hex(buf: ArrayBuffer): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", buf);
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+function parseExternalLinks(text: string): Array<{ url: string; label?: string }> {
+  return text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      // Format: "URL | optional label"
+      const pipe = line.indexOf("|");
+      if (pipe === -1) return { url: line };
+      const url = line.slice(0, pipe).trim();
+      const label = line.slice(pipe + 1).trim();
+      return label ? { url, label } : { url };
+    });
+}
+
 function ActionPanel({
   wallet,
   isPoster,
@@ -524,13 +631,25 @@ function ActionPanel({
   error: string | null;
   onApply: (message: string) => void;
   onAccept: (applicationId: string) => void;
-  onSubmit: (content: string) => void;
+  onSubmit: (
+    content: string,
+    files: Array<{
+      key: string;
+      name: string;
+      contentType: string;
+      sizeBytes: number;
+      sha256: string;
+    }>,
+    externalLinks: Array<{ url: string; label?: string }>,
+  ) => void;
   onApprove: () => void;
   onDispute: (reason: string) => void;
   onRunJudge: () => void;
 }) {
   const [applyMsg, setApplyMsg] = useState("");
   const [deliverableText, setDeliverableText] = useState("");
+  const [externalLinksText, setExternalLinksText] = useState("");
+  const [uploads, setUploads] = useState<UploadEntry[]>([]);
   const [disputeReason, setDisputeReason] = useState("");
 
   if (!wallet) {
@@ -590,24 +709,227 @@ function ActionPanel({
       )}
 
       {canSubmit && (
-        <div className="space-y-2">
-          <textarea
-            value={deliverableText}
-            onChange={(e) => setDeliverableText(e.target.value)}
-            rows={6}
-            placeholder="Inline deliverable content. For files use external URLs (R2/S3/GitHub)."
-            className="form-input resize-none font-mono"
-          />
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <span className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
+              Write-up
+            </span>
+            <textarea
+              value={deliverableText}
+              onChange={(e) => setDeliverableText(e.target.value)}
+              rows={5}
+              placeholder="Summary, explanation, or notes for the poster…"
+              className="form-input resize-none font-mono"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
+                Files
+              </span>
+              <span className="font-mono text-[10px] text-muted-foreground/70">
+                Up to 20 files, 50 MB each. Hashed on your machine; uploaded direct to storage.
+              </span>
+            </div>
+            <input
+              type="file"
+              multiple
+              disabled={busy}
+              onChange={async (e) => {
+                const fileList = e.target.files;
+                if (!fileList) return;
+                const picked = Array.from(fileList);
+                e.currentTarget.value = ""; // allow re-picking the same file later
+
+                for (const file of picked) {
+                  const localId =
+                    typeof crypto.randomUUID === "function"
+                      ? crypto.randomUUID()
+                      : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+                  setUploads((prev) => [
+                    ...prev,
+                    {
+                      localId,
+                      name: file.name,
+                      contentType: file.type || "application/octet-stream",
+                      sizeBytes: file.size,
+                      progress: 0,
+                      status: "hashing",
+                    },
+                  ]);
+
+                  try {
+                    const buf = await file.arrayBuffer();
+                    const sha = await sha256Hex(buf);
+                    setUploads((prev) =>
+                      prev.map((u) =>
+                        u.localId === localId
+                          ? { ...u, sha256: sha, status: "preparing" }
+                          : u,
+                      ),
+                    );
+
+                    const presignRes = await fetch(
+                      `/api/v1/tasks/${task.task_id}/deliverable/upload-url`,
+                      {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        credentials: "include",
+                        body: JSON.stringify({
+                          filename: file.name,
+                          contentType: file.type || "application/octet-stream",
+                          sizeBytes: file.size,
+                        }),
+                      },
+                    );
+                    const presignJson = await presignRes.json();
+                    if (!presignRes.ok)
+                      throw new Error(
+                        presignJson.error?.message ?? "Upload URL request failed",
+                      );
+
+                    setUploads((prev) =>
+                      prev.map((u) =>
+                        u.localId === localId
+                          ? {
+                              ...u,
+                              key: presignJson.key,
+                              finalUrl: presignJson.finalUrl,
+                              status: "uploading",
+                            }
+                          : u,
+                      ),
+                    );
+
+                    // Use XHR for progress (fetch lacks upload-progress on web).
+                    await new Promise<void>((resolve, reject) => {
+                      const xhr = new XMLHttpRequest();
+                      xhr.open("PUT", presignJson.url);
+                      if (file.type) {
+                        xhr.setRequestHeader("Content-Type", file.type);
+                      }
+                      xhr.upload.onprogress = (ev) => {
+                        if (!ev.lengthComputable) return;
+                        const pct = Math.round((ev.loaded / ev.total) * 100);
+                        setUploads((prev) =>
+                          prev.map((u) =>
+                            u.localId === localId ? { ...u, progress: pct } : u,
+                          ),
+                        );
+                      };
+                      xhr.onload = () => {
+                        if (xhr.status >= 200 && xhr.status < 300) resolve();
+                        else reject(new Error(`PUT failed: HTTP ${xhr.status}`));
+                      };
+                      xhr.onerror = () => reject(new Error("PUT network error"));
+                      xhr.send(buf);
+                    });
+
+                    setUploads((prev) =>
+                      prev.map((u) =>
+                        u.localId === localId
+                          ? { ...u, progress: 100, status: "done" }
+                          : u,
+                      ),
+                    );
+                  } catch (err) {
+                    setUploads((prev) =>
+                      prev.map((u) =>
+                        u.localId === localId
+                          ? {
+                              ...u,
+                              status: "error",
+                              error: err instanceof Error ? err.message : String(err),
+                            }
+                          : u,
+                      ),
+                    );
+                  }
+                }
+              }}
+              className="block w-full text-xs text-muted-foreground file:mr-3 file:rounded-md file:border file:border-border file:bg-card/60 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-foreground hover:file:border-foreground/30"
+            />
+
+            {uploads.length > 0 && (
+              <ul className="space-y-1 text-sm">
+                {uploads.map((u) => (
+                  <li
+                    key={u.localId}
+                    className="flex items-center justify-between gap-3 rounded-md border border-border/60 bg-card/40 px-3 py-2"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate font-mono text-xs">{u.name}</div>
+                      <div className="font-mono text-[10px] text-muted-foreground">
+                        {formatBytes(u.sizeBytes)} ·{" "}
+                        {u.status === "hashing"
+                          ? "hashing…"
+                          : u.status === "preparing"
+                            ? "requesting upload URL…"
+                            : u.status === "uploading"
+                              ? `${u.progress}%`
+                              : u.status === "done"
+                                ? `sha256: ${u.sha256?.slice(0, 12)}…`
+                                : `error: ${u.error}`}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setUploads((prev) => prev.filter((x) => x.localId !== u.localId))
+                      }
+                      disabled={busy}
+                      className="rounded-md border border-border bg-card/60 px-2 py-1 text-[10px] font-mono uppercase tracking-wider transition-colors hover:border-foreground/30 disabled:opacity-40"
+                    >
+                      Remove
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <span className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
+              External links
+            </span>
+            <textarea
+              value={externalLinksText}
+              onChange={(e) => setExternalLinksText(e.target.value)}
+              rows={3}
+              placeholder={"One per line. Optional label after a pipe:\nhttps://example.com/demo | live demo"}
+              className="form-input resize-none font-mono text-xs"
+            />
+          </div>
+
           <button
-            onClick={() => onSubmit(deliverableText)}
-            disabled={busy || deliverableText.trim().length === 0}
+            onClick={() => {
+              const readyFiles = uploads
+                .filter((u) => u.status === "done" && u.key && u.sha256)
+                .map((u) => ({
+                  key: u.key as string,
+                  name: u.name,
+                  contentType: u.contentType,
+                  sizeBytes: u.sizeBytes,
+                  sha256: u.sha256 as string,
+                }));
+              const externalLinks = parseExternalLinks(externalLinksText);
+              onSubmit(deliverableText, readyFiles, externalLinks);
+            }}
+            disabled={
+              busy ||
+              uploads.some((u) => u.status !== "done" && u.status !== "error") ||
+              (deliverableText.trim().length === 0 &&
+                uploads.filter((u) => u.status === "done").length === 0 &&
+                externalLinksText.trim().length === 0)
+            }
             className="bg-brand-gradient inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium text-white shadow-violet/20 transition-transform duration-200 hover:scale-[1.02] disabled:opacity-40 disabled:cursor-not-allowed"
           >
             Submit deliverable
           </button>
           <p className="font-mono text-[11px] text-muted-foreground">
-            Signs an on-chain <code>submit_deliverable</code> tx and starts the 24h verification
-            window. The judge runs automatically.
+            Signs an on-chain <code>submit_deliverable</code> tx, starts the 24h
+            verification window, and triggers the judge.
           </p>
         </div>
       )}

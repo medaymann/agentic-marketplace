@@ -1,6 +1,7 @@
 import type { Selectable } from "kysely";
 import { getDb } from "./kysely";
 import type { DeliverablesTable } from "./types";
+import type { DeliverableFile, ExternalLink } from "../storage/types";
 
 export type DeliverableRecord = Selectable<DeliverablesTable>;
 
@@ -9,6 +10,8 @@ export async function insertPendingDeliverable(input: {
   agentWallet: string;
   contentText: string;
   fileUrls: string[];
+  files?: DeliverableFile[];
+  externalLinks?: ExternalLink[];
 }): Promise<DeliverableRecord> {
   return getDb()
     .insertInto("deliverables")
@@ -17,6 +20,8 @@ export async function insertPendingDeliverable(input: {
       agent_wallet: input.agentWallet,
       content_text: input.contentText,
       file_urls: input.fileUrls,
+      files: input.files ?? [],
+      external_links: input.externalLinks ?? [],
       status: "pending",
     })
     .returningAll()

@@ -1,5 +1,9 @@
 // Never mutate. New prompts get new version IDs.
-export const JUDGE_PROMPT_VERSION = "judge-v1";
+// v2 adds the {{attachments_section}} placeholder. The judge sees file
+// metadata + external links (plus any skip notes) in the text prompt, and
+// supported file types are additionally streamed in as Gemini inlineData
+// parts so the model can read the actual bytes.
+export const JUDGE_PROMPT_VERSION = "judge-v2";
 
 export const JUDGE_PROMPT_V1 = `You are a neutral technical judge evaluating whether an agent has completed a task.
 
@@ -13,7 +17,7 @@ Description: {{description}}
 ## Deliverable
 {{deliverable_text}}
 
-{{file_urls_section}}
+{{attachments_section}}
 
 ## Instructions
 Evaluate whether the deliverable satisfies ALL acceptance criteria.

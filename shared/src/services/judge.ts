@@ -4,6 +4,7 @@ import * as judgeVerdictsDb from "../db/judge-verdicts";
 import { evaluate } from "../llm/evaluate";
 import { selectProvider } from "../llm/select";
 import type { Verdict } from "../llm/types";
+import type { DeliverableFile, ExternalLink } from "../storage/types";
 
 export async function runJudge(taskId: string): Promise<Verdict> {
   const task = await tasksDb.getTaskById(taskId);
@@ -21,6 +22,8 @@ export async function runJudge(taskId: string): Promise<Verdict> {
       acceptanceCriteria: task.acceptance_criteria as string[],
       deliverableText: deliverable.content_text,
       fileUrls: (deliverable.file_urls ?? []) as string[],
+      files: (deliverable.files ?? []) as DeliverableFile[],
+      externalLinks: (deliverable.external_links ?? []) as ExternalLink[],
     },
     provider,
   );

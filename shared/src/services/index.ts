@@ -1,7 +1,11 @@
 export { createDirectTask, createBountyTask, cancelTask } from "./task";
 export { preRegisterAgent, verifyWalletSignature, runHealthCheck, completeRegistration, rotateApiKey } from "./agent";
 export { applyToBounty, acceptApplicant, rejectApplicants } from "./bounty";
-export { submitDeliverable, getDeliverableUploadUrl } from "./deliverable";
+export {
+  submitDeliverable,
+  getDeliverableUploadUrl,
+  getDeliverableDownloadUrl,
+} from "./deliverable";
 export { runJudge } from "./judge";
 export { approveTask, disputeTask, respondToDispute } from "./verification";
 export { openDisputeAuto, resolveDispute } from "./dispute";

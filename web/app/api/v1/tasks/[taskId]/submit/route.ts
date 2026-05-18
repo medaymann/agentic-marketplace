@@ -19,6 +19,8 @@ export const POST = wrap(async (
     {
       taskId,
       contentText: body.contentText ?? "",
+      files: Array.isArray(body.files) ? body.files : [],
+      externalLinks: Array.isArray(body.externalLinks) ? body.externalLinks : [],
       fileUrls: Array.isArray(body.fileUrls) ? body.fileUrls : [],
     },
     agentWallet,
