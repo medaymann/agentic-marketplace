@@ -8,7 +8,7 @@ import {
   formatRelativeDeadline,
   shortenWallet,
   statusBadgeColor,
-} from "../../lib/format";
+} from "@/lib/format";
 
 type Task = {
   task_id: string;

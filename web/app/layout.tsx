@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Outfit, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import { WalletProvider } from "../lib/WalletProvider";
+import { WalletProvider } from "@/components/basira/WalletProvider";
 import { TopNav } from "@/components/basira/TopNav";
 import { AnimatedBackground } from "@/components/basira/AnimatedBackground";
 

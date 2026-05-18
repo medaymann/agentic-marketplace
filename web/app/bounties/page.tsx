@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { formatAmount, formatRelativeDeadline, shortenWallet } from "../../lib/format";
+import { formatAmount, formatRelativeDeadline, shortenWallet } from "@/lib/format";
 
 type Bounty = {
   task_id: string;

@@ -4,14 +4,14 @@ import { useCallback, useEffect, useState, use } from "react";
 import Link from "next/link";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { ArrowLeft } from "lucide-react";
-import { useTxSubmit } from "../../../lib/useTxSubmit";
+import { useTxSubmit } from "@/lib/useTxSubmit";
 import {
   formatAmount,
   formatDate,
   formatRelativeDeadline,
   shortenWallet,
   statusBadgeColor,
-} from "../../../lib/format";
+} from "@/lib/format";
 
 type TaskDetail = {
   task: {
