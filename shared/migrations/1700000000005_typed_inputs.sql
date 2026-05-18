@@ -1,13 +1,10 @@
 -- Up Migration
 
 ALTER TABLE agents
-  ADD COLUMN input_schema  jsonb,
-  ADD COLUMN output_schema jsonb;
+  ADD COLUMN input_schema jsonb;
 
 COMMENT ON COLUMN agents.input_schema IS
   'Optional JSON Schema (object) describing the inputs a poster must supply when assigning a direct task to this agent. When NULL, posters use the generic title+description+acceptance criteria form.';
-COMMENT ON COLUMN agents.output_schema IS
-  'Optional JSON Schema (object) describing the structural shape of the deliverable. Used by the judge to do structural validation before LLM acceptance-criteria evaluation.';
 
 ALTER TABLE tasks
   ADD COLUMN typed_inputs          jsonb,
@@ -25,5 +22,4 @@ ALTER TABLE tasks
   DROP COLUMN IF EXISTS typed_inputs;
 
 ALTER TABLE agents
-  DROP COLUMN IF EXISTS output_schema,
   DROP COLUMN IF EXISTS input_schema;

@@ -20,10 +20,9 @@ const inputSchema = z.object({
   capabilityTags: z.array(z.string()).default([]),
   endpointUrl: z.string().url().default("https://example.com"),
   supportedCurrencies: z.array(z.enum(["SOL", "USDC"])).min(1).default(["SOL"]),
-  // Optional per-agent JSON Schemas. inputSchema MUST be an object-shaped
-  // schema so the poster form can render it.
+  // Optional input JSON Schema. MUST be an object-shaped schema so the poster
+  // form can render it. When omitted, posters use the generic free-text form.
   inputSchema: z.unknown().optional(),
-  outputSchema: z.unknown().optional(),
 });
 
 export const POST = wrap(async (req: NextRequest) => {
@@ -41,9 +40,9 @@ export const POST = wrap(async (req: NextRequest) => {
     );
   }
 
-  // Validate that the supplied JSON Schemas actually compile under ajv before
-  // we persist them. Reject early; better than a poster filling a form against
-  // a broken schema and failing on task creation.
+  // Validate that the supplied input schema compiles under ajv before we
+  // persist it. Reject early; better than a poster filling a form against a
+  // broken schema and failing on task creation.
   if (body.data.inputSchema !== undefined && body.data.inputSchema !== null) {
     if (!isFormShapedSchema(body.data.inputSchema)) {
       return NextResponse.json(
@@ -66,28 +65,13 @@ export const POST = wrap(async (req: NextRequest) => {
       );
     }
   }
-  if (body.data.outputSchema !== undefined && body.data.outputSchema !== null) {
-    try {
-      compileSchema(body.data.outputSchema);
-    } catch (err) {
-      const msg = err instanceof SchemaCompileError ? err.message : "Invalid outputSchema";
-      return NextResponse.json(
-        { error: { code: "validation_error", message: `outputSchema: ${msg}` } },
-        { status: 400 },
-      );
-    }
-  }
 
   const existing = await agentsDb.getAgentByWallet(body.data.wallet);
   if (existing) {
-    // Allow updating schemas on an existing agent so a builder can iterate
+    // Allow updating the schema on an existing agent so a builder can iterate
     // without re-creating their agent row.
-    if (body.data.inputSchema !== undefined || body.data.outputSchema !== undefined) {
-      await agentsDb.setAgentSchemas(
-        body.data.wallet,
-        body.data.inputSchema ?? existing.input_schema,
-        body.data.outputSchema ?? existing.output_schema,
-      );
+    if (body.data.inputSchema !== undefined) {
+      await agentsDb.setAgentInputSchema(body.data.wallet, body.data.inputSchema);
       const agent = await agentsDb.getAgentByWallet(body.data.wallet);
       return NextResponse.json(serialize({ agent }));
     }
@@ -110,7 +94,6 @@ export const POST = wrap(async (req: NextRequest) => {
     supportedCurrencies: body.data.supportedCurrencies,
     minTaskRewardUsdc: BigInt(0),
     inputSchema: body.data.inputSchema ?? null,
-    outputSchema: body.data.outputSchema ?? null,
   });
 
   // Skip stages 2-4 (signature verification, endpoint health check, on-chain

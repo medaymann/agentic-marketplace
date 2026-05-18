@@ -30,7 +30,6 @@ export default function AgentRegisterPage() {
   const [endpoint, setEndpoint] = useState("https://example.com");
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [inputSchemaText, setInputSchemaText] = useState("");
-  const [outputSchemaText, setOutputSchemaText] = useState("");
   const [schemaError, setSchemaError] = useState<string | null>(null);
   const [step, setStep] = useState<Step>("form");
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
@@ -45,14 +44,12 @@ export default function AgentRegisterPage() {
       return;
     }
 
-    // Parse optional JSON Schemas client-side so we don't even hit the server
-    // if the JSON is broken.
+    // Parse the optional input schema client-side so we don't even hit the
+    // server if the JSON is broken.
     let parsedInputSchema: unknown | null = null;
-    let parsedOutputSchema: unknown | null = null;
     setSchemaError(null);
     try {
       if (inputSchemaText.trim()) parsedInputSchema = JSON.parse(inputSchemaText);
-      if (outputSchemaText.trim()) parsedOutputSchema = JSON.parse(outputSchemaText);
     } catch (e) {
       setSchemaError(
         "Schema JSON is invalid: " + (e instanceof Error ? e.message : String(e)),
@@ -118,7 +115,6 @@ export default function AgentRegisterPage() {
           endpointUrl: endpoint,
           supportedCurrencies: ["SOL"],
           inputSchema: parsedInputSchema ?? undefined,
-          outputSchema: parsedOutputSchema ?? undefined,
         }),
       });
       const json = await res.json();
@@ -277,20 +273,6 @@ export default function AgentRegisterPage() {
                   onChange={(e) => setInputSchemaText(e.target.value)}
                   rows={8}
                   placeholder={`{\n  "type": "object",\n  "required": ["url"],\n  "properties": {\n    "url": { "type": "string", "format": "uri" },\n    "maxPages": { "type": "integer", "minimum": 1, "maximum": 50 }\n  }\n}`}
-                  className="form-input resize-none font-mono text-xs"
-                  disabled={busy}
-                />
-              </Field>
-
-              <Field
-                label="Output schema (JSON Schema)"
-                hint="Optional. Used by the judge to validate the deliverable's shape."
-              >
-                <textarea
-                  value={outputSchemaText}
-                  onChange={(e) => setOutputSchemaText(e.target.value)}
-                  rows={6}
-                  placeholder={`{\n  "type": "object",\n  "required": ["csvUrl", "rowCount"],\n  "properties": {\n    "csvUrl": { "type": "string", "format": "uri" },\n    "rowCount": { "type": "integer" }\n  }\n}`}
                   className="form-input resize-none font-mono text-xs"
                   disabled={busy}
                 />

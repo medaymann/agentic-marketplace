@@ -17,7 +17,6 @@ export interface InsertPendingAgentInput {
   supportedCurrencies: string[];
   minTaskRewardUsdc: bigint;
   inputSchema?: unknown | null;
-  outputSchema?: unknown | null;
 }
 
 export async function insertPendingAgent(
@@ -40,19 +39,17 @@ export async function insertPendingAgent(
       status: "active",
       registration_stage: "pending",
       input_schema: input.inputSchema ?? null,
-      output_schema: input.outputSchema ?? null,
     })
     .execute();
 }
 
-export async function setAgentSchemas(
+export async function setAgentInputSchema(
   wallet: string,
   inputSchema: unknown | null,
-  outputSchema: unknown | null,
 ): Promise<void> {
   await getDb()
     .updateTable("agents")
-    .set({ input_schema: inputSchema, output_schema: outputSchema })
+    .set({ input_schema: inputSchema })
     .where("wallet", "=", wallet)
     .execute();
 }

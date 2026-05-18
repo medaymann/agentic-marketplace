@@ -62,14 +62,8 @@ async function main() {
       maxPages: { type: "integer", minimum: 1, maximum: 50 },
     },
   };
-  const outputSchema = {
-    type: "object",
-    required: ["csvUrl"],
-    properties: { csvUrl: { type: "string" }, rowCount: { type: "integer" } },
-  };
-
   // ----- [1] Register agent with schema -----
-  console.log("\n[1] Register agent row with input/output schemas");
+  console.log("\n[1] Register agent row with input schema");
   await agentsDb.insertPendingAgent({
     wallet: freshAgent,
     name: "ScrapeBot Test",
@@ -83,14 +77,12 @@ async function main() {
     supportedCurrencies: ["SOL"],
     minTaskRewardUsdc: 0n,
     inputSchema,
-    outputSchema,
   });
   await agentsDb.setRegistrationStage(freshAgent, "complete");
   const stored = await agentsDb.getAgentByWallet(freshAgent);
   if (!stored) fail("[1]", "agent row missing");
-  if (!stored.input_schema || !stored.output_schema)
-    fail("[1]", "schemas not persisted");
-  ok("agent registered with both schemas");
+  if (!stored.input_schema) fail("[1]", "input schema not persisted");
+  ok("agent registered with input schema");
 
   // ----- [2] Schema GET helper round-trip -----
   console.log("\n[2] Fetch schema (mirroring GET /agents/[wallet]/schema)");
@@ -175,7 +167,7 @@ async function main() {
   // ----- [6] Validate snapshot is decoupled from agent's current schema -----
   console.log("\n[6] Update agent schema, confirm snapshot unchanged");
   const newSchema = { type: "object", properties: { totallyDifferent: { type: "string" } } };
-  await agentsDb.setAgentSchemas(freshAgent, newSchema, null);
+  await agentsDb.setAgentInputSchema(freshAgent, newSchema);
   const after = await tasksDb.getTaskById(result.taskId);
   const snap2 = after?.input_schema_snapshot as { properties?: Record<string, unknown> };
   if (!snap2 || !snap2.properties || !snap2.properties.url) {

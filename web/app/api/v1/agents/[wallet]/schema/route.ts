@@ -34,6 +34,5 @@ export const GET = wrap(async (
     wallet: agent.wallet,
     name: agent.name,
     inputSchema: agent.input_schema ?? null,
-    outputSchema: agent.output_schema ?? null,
   });
 });
