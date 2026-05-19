@@ -8,7 +8,8 @@ import {
   ASSOCIATED_TOKEN_PROGRAM_ID,
   getAssociatedTokenAddressSync,
 } from "@solana/spl-token";
-import { BN, Program } from "@coral-xyz/anchor";
+import { Program } from "@coral-xyz/anchor";
+import BN from "bn.js";
 import type { Basira } from "../idl/basira";
 import { taskPda, vaultPda, taskIdFromUuid } from "../pdas";
 import { buildVersionedTx } from "./_tx";

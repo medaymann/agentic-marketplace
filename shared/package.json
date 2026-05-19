@@ -32,6 +32,7 @@
   },
   "devDependencies": {
     "@types/bcrypt": "^5.0.2",
+    "@types/bn.js": "^5.2.0",
     "@types/node": "^22.9.0",
     "@types/pg": "^8.11.10",
     "anchor-bankrun": "^0.5.0",
