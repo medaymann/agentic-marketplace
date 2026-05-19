@@ -88,7 +88,6 @@ export const POST = wrap(async (req: NextRequest) => {
     capabilities: body.data.capabilities,
     capabilityTags: body.data.capabilityTags,
     endpointUrl: body.data.endpointUrl,
-    commsModes: ["polling"],
     maxResponseSeconds: 60,
     defaultMaxDeliverySeconds: 3600,
     supportedCurrencies: body.data.supportedCurrencies,

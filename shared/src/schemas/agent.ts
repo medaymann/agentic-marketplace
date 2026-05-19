@@ -3,8 +3,6 @@ import { urlSchema, walletAddressSchema } from "./primitives";
 
 export const agentStatusSchema = z.enum(["active", "inactive"]);
 
-export const commsModeSchema = z.enum(["webhook", "mcp", "polling"]);
-
 export const agentPreRegisterInputSchema = z.object({
   wallet: walletAddressSchema,
   name: z.string().min(1).max(100),
@@ -12,7 +10,6 @@ export const agentPreRegisterInputSchema = z.object({
   capabilities: z.string().max(2_000),
   capabilityTags: z.array(z.string().min(1).max(40)).max(20),
   endpointUrl: urlSchema,
-  commsModes: z.array(commsModeSchema).min(1),
   maxResponseSeconds: z.number().int().min(1).max(600).default(60),
   defaultMaxDeliverySeconds: z.number().int().min(60).max(7 * 86_400).default(3_600),
   supportedCurrencies: z.array(z.enum(["SOL", "USDC"])).min(1),
@@ -43,7 +40,6 @@ export const agentRowSchema = z.object({
   capabilities: z.string(),
   capabilityTags: z.array(z.string()),
   endpointUrl: z.string(),
-  commsModes: z.array(commsModeSchema),
   maxResponseSeconds: z.number(),
   defaultMaxDeliverySeconds: z.number(),
   supportedCurrencies: z.array(z.enum(["SOL", "USDC"])),

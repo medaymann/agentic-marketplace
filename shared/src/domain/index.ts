@@ -9,7 +9,6 @@ import type {
   bountyApplicationInputSchema,
   bountyApplicationRowSchema,
   bountyApplicationStatusSchema,
-  commsModeSchema,
   deliverableRowSchema,
   deliverableSubmitInputSchema,
   disputeOpenInputSchema,
@@ -45,7 +44,6 @@ export type AgentRegisterCompleteInput = z.infer<typeof agentRegisterCompleteInp
 export type AgentRotateApiKeyInput = z.infer<typeof agentRotateApiKeyInputSchema>;
 export type AgentRow = z.infer<typeof agentRowSchema>;
 export type AgentStatus = z.infer<typeof agentStatusSchema>;
-export type CommsMode = z.infer<typeof commsModeSchema>;
 
 export type BountyApplicationInput = z.infer<typeof bountyApplicationInputSchema>;
 export type BountyApplicationRow = z.infer<typeof bountyApplicationRowSchema>;

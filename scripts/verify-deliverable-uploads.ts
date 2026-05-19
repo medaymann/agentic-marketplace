@@ -79,7 +79,6 @@ async function main() {
     capabilities: "files",
     capabilityTags: ["test"],
     endpointUrl: "https://example.com",
-    commsModes: ["polling"],
     maxResponseSeconds: 60,
     defaultMaxDeliverySeconds: 3600,
     supportedCurrencies: ["SOL"],

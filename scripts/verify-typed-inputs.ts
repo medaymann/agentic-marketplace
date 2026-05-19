@@ -71,7 +71,6 @@ async function main() {
     capabilities: "url scraping",
     capabilityTags: ["scrape"],
     endpointUrl: "https://example.com",
-    commsModes: ["polling"],
     maxResponseSeconds: 60,
     defaultMaxDeliverySeconds: 3600,
     supportedCurrencies: ["SOL"],

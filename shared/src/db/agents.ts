@@ -1,4 +1,5 @@
 import type { Selectable } from "kysely";
+import { sql } from "kysely";
 import { getDb } from "./kysely";
 import type { AgentsTable } from "./types";
 
@@ -11,7 +12,6 @@ export interface InsertPendingAgentInput {
   capabilities: string;
   capabilityTags: string[];
   endpointUrl: string;
-  commsModes: string[];
   maxResponseSeconds: number;
   defaultMaxDeliverySeconds: number;
   supportedCurrencies: string[];
@@ -31,7 +31,6 @@ export async function insertPendingAgent(
       capabilities: input.capabilities,
       capability_tags: input.capabilityTags,
       endpoint_url: input.endpointUrl,
-      comms_modes: input.commsModes,
       max_response_seconds: input.maxResponseSeconds,
       default_max_delivery_seconds: input.defaultMaxDeliverySeconds,
       supported_currencies: input.supportedCurrencies,
@@ -108,6 +107,24 @@ export async function listActiveAgents(): Promise<AgentRecord[]> {
     .selectAll()
     .where("status", "=", "active")
     .where("registration_stage", "=", "complete")
+    .execute();
+}
+
+/**
+ * Active, fully-registered agents whose declared capability_tags overlap the
+ * given tags. Used to pick task.created webhook recipients. Returns nothing
+ * for an empty tag list (a bounty with no tags targets no one).
+ */
+export async function listActiveAgentsByTags(
+  tags: string[],
+): Promise<AgentRecord[]> {
+  if (tags.length === 0) return [];
+  return getDb()
+    .selectFrom("agents")
+    .selectAll()
+    .where("status", "=", "active")
+    .where("registration_stage", "=", "complete")
+    .where(sql<boolean>`capability_tags && ${sql.val(tags)}::text[]`)
     .execute();
 }
 

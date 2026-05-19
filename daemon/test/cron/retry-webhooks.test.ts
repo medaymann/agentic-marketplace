@@ -60,7 +60,6 @@ async function seedAgentWithEndpoint(endpointUrl: string): Promise<void> {
     capabilities: "x",
     capabilityTags: ["x"],
     endpointUrl,
-    commsModes: ["webhook"],
     maxResponseSeconds: 60,
     defaultMaxDeliverySeconds: 3600,
     supportedCurrencies: ["SOL"],

@@ -169,7 +169,6 @@ async function main(): Promise<void> {
     capabilities: "general-purpose",
     capabilityTags: ["demo"],
     endpointUrl: "https://example.invalid",
-    commsModes: ["webhook"],
     maxResponseSeconds: 60,
     defaultMaxDeliverySeconds: 3_600,
     supportedCurrencies: ["SOL"],

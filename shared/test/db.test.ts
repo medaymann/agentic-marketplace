@@ -66,7 +66,6 @@ describeDb("db integration", () => {
       capabilities: "echo",
       capabilityTags: ["echo"],
       endpointUrl: "https://example.com/agent",
-      commsModes: ["webhook"],
       maxResponseSeconds: 60,
       defaultMaxDeliverySeconds: 3_600,
       supportedCurrencies: ["SOL"],

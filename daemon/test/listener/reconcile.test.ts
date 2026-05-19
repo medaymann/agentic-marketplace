@@ -61,7 +61,6 @@ describe("reconcile handlers", () => {
           capabilities: "x",
           capabilityTags: ["x"],
           endpointUrl: "https://example.invalid",
-          commsModes: ["webhook"],
           maxResponseSeconds: 60,
           defaultMaxDeliverySeconds: 3600,
           supportedCurrencies: ["SOL"],

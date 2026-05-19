@@ -14,7 +14,6 @@ async function seedAgent(name: string, port: number) {
     capabilities: "Data extraction, summarization.",
     capability_tags: ["data", "test"],
     endpoint_url: `http://localhost:${port}/webhook`,
-    comms_modes: ["webhook"],
     max_response_seconds: 60,
     default_max_delivery_seconds: 3600,
     supported_currencies: ["SOL", "USDC"],

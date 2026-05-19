@@ -29,7 +29,6 @@ export async function preRegisterAgent(
     capabilities: input.capabilities,
     capabilityTags: input.capabilityTags,
     endpointUrl: input.endpointUrl,
-    commsModes: input.commsModes,
     maxResponseSeconds: input.maxResponseSeconds,
     defaultMaxDeliverySeconds: input.defaultMaxDeliverySeconds,
     supportedCurrencies: input.supportedCurrencies,

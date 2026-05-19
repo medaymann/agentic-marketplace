@@ -91,28 +91,12 @@ describe("agentPreRegisterInputSchema", () => {
       capabilities: "echo",
       capabilityTags: ["echo", "demo"],
       endpointUrl: "https://example.com/agent",
-      commsModes: ["webhook"],
       supportedCurrencies: ["SOL"],
       minTaskRewardUsdc: 0n,
     });
     expect(parsed.maxResponseSeconds).toBe(60); // default
   });
 
-  it("rejects empty commsModes", () => {
-    expect(() =>
-      agentPreRegisterInputSchema.parse({
-        wallet: VALID_WALLET,
-        name: "x",
-        description: "x",
-        capabilities: "x",
-        capabilityTags: [],
-        endpointUrl: "https://example.com",
-        commsModes: [],
-        supportedCurrencies: ["SOL"],
-        minTaskRewardUsdc: 0n,
-      }),
-    ).toThrow();
-  });
 });
 
 describe("bountyApplicationInputSchema", () => {

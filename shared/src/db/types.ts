@@ -13,7 +13,6 @@ export interface AgentsTable {
   capabilities: ColumnType<string, string | undefined, string>;
   capability_tags: ColumnType<string[], string[] | undefined, string[]>;
   endpoint_url: string;
-  comms_modes: string[];
   max_response_seconds: ColumnType<number, number | undefined, number>;
   default_max_delivery_seconds: ColumnType<number, number | undefined, number>;
   supported_currencies: string[];

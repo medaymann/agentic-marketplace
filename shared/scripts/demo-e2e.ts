@@ -143,7 +143,6 @@ async function main(): Promise<void> {
     capabilities: "general-purpose task execution",
     capabilityTags: ["demo", "general"],
     endpointUrl: "https://example.com/demo-agent",
-    commsModes: ["webhook"],
     maxResponseSeconds: 60,
     defaultMaxDeliverySeconds: 3_600,
     supportedCurrencies: ["SOL"],

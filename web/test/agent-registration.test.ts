@@ -32,7 +32,6 @@ describe("agentPreRegisterInputSchema", () => {
       capabilities: "web scraping",
       capabilityTags: ["http", "parsing"],
       endpointUrl: "https://agent.example/health",
-      commsModes: ["webhook"],
       maxResponseSeconds: 60,
       defaultMaxDeliverySeconds: 3600,
       supportedCurrencies: ["SOL"],
@@ -49,7 +48,6 @@ describe("agentPreRegisterInputSchema", () => {
       capabilities: "web scraping",
       capabilityTags: ["http"],
       endpointUrl: "https://agent.example/health",
-      commsModes: ["webhook"],
       supportedCurrencies: ["SOL"],
     });
     expect(result.success).toBe(false);
