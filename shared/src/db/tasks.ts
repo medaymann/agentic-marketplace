@@ -20,6 +20,7 @@ export interface InsertTaskInput {
   taskPda?: string;
   typedInputs?: unknown | null;
   inputSchemaSnapshot?: unknown | null;
+  capabilityTags?: string[];
 }
 
 export async function insertTask(input: InsertTaskInput): Promise<void> {
@@ -41,6 +42,7 @@ export async function insertTask(input: InsertTaskInput): Promise<void> {
       task_pda: input.taskPda ?? null,
       typed_inputs: input.typedInputs ?? null,
       input_schema_snapshot: input.inputSchemaSnapshot ?? null,
+      capability_tags: input.capabilityTags ?? [],
     })
     .execute();
 }

@@ -4,10 +4,21 @@ import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useWallet, useConnection } from "@solana/wallet-adapter-react";
 import { VersionedTransaction } from "@solana/web3.js";
-import { Lock, X } from "lucide-react";
+import { Lock, X, Check } from "lucide-react";
 
 type Step = "form" | "signing" | "confirming" | "done";
 type Mode = "bounty" | "direct";
+
+const TAG_OPTIONS = [
+  "writing",
+  "code",
+  "data",
+  "design",
+  "research",
+  "summarization",
+  "translation",
+  "qa",
+];
 
 export default function NewTaskPage() {
   return (
@@ -32,6 +43,7 @@ function NewTaskInner() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [criteriaText, setCriteriaText] = useState("");
+  const [tags, setTags] = useState<string[]>([]);
   const [amount, setAmount] = useState("0.01");
   const [deadlineDate, setDeadlineDate] = useState(() => {
     const d = new Date(Date.now() + 180 * 60 * 1000);
@@ -131,6 +143,7 @@ function NewTaskInner() {
         title,
         description: description || title,
         acceptanceCriteria: criteria,
+        capabilityTags: tags,
         amount: amountBaseUnits.toString(),
         deadline: deadlineUnix.toString(),
       };
@@ -287,6 +300,46 @@ function NewTaskInner() {
             className="form-input resize-none font-mono"
           />
         </Field>
+
+        {/* Tags drive which agents get notified of this bounty */}
+        {!isDirect && (
+          <Field label="Tags" hint="Agents with matching tags are notified of this bounty.">
+            <div className="flex flex-wrap gap-2">
+              {TAG_OPTIONS.map((t) => {
+                const active = tags.includes(t);
+                return (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() =>
+                      setTags((prev) =>
+                        prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t],
+                      )
+                    }
+                    disabled={busy}
+                    className={`relative inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-mono uppercase tracking-wide transition-colors ${
+                      active
+                        ? "border-transparent text-foreground"
+                        : "border-border text-muted-foreground hover:border-foreground/30 hover:text-foreground"
+                    }`}
+                    style={
+                      active
+                        ? {
+                            background:
+                              "linear-gradient(135deg, rgba(169,120,235,0.12), rgba(218,91,203,0.06))",
+                            borderColor: "rgba(169,120,235,0.4)",
+                          }
+                        : {}
+                    }
+                  >
+                    {active && <Check className="h-3 w-3" style={{ color: "#A978EB" }} />}
+                    {t}
+                  </button>
+                );
+              })}
+            </div>
+          </Field>
+        )}
 
         {/* Agent-specific typed inputs */}
         {hasSchema && (

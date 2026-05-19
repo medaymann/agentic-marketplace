@@ -2,6 +2,7 @@ import { z } from "zod";
 import { uuidSchema, walletAddressSchema } from "./primitives";
 
 export const webhookEventSchema = z.enum([
+  "task.created",
   "task.offered",
   "task.assigned",
   "task.submitted",

@@ -39,6 +39,7 @@ const baseTaskFields = {
   acceptanceCriteria: acceptanceCriteriaSchema,
   deadline: unixSecondsSchema,
   typedInputs: typedInputsSchema.optional(),
+  capabilityTags: z.array(z.string().min(1).max(40)).max(20).optional(),
 };
 
 const solDirectSchema = z.object({

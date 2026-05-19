@@ -1,8 +1,10 @@
 import { Connection, PublicKey } from "@solana/web3.js";
 import {
   tasksDb,
+  agentsDb,
   disputesDb,
   deliverablesDb,
+  webhookDeliveriesDb,
   recordSettlement,
 } from "@basira/shared";
 import { TREASURY_ADDRESS } from "@basira/shared";
@@ -11,7 +13,7 @@ import {
   type ParsedProgramTransaction,
   type InstructionName,
 } from "./parse.js";
-import { emitAgentWebhook } from "./emit.js";
+import { emitAgentWebhook, broadcastWebhook } from "./emit.js";
 import { triggerJudge } from "./judge-trigger.js";
 
 const FEE_BPS = 500n;
@@ -37,6 +39,57 @@ async function findTaskByPda(
   pda: PublicKey,
 ): Promise<Awaited<ReturnType<typeof tasksDb.getTaskByPda>>> {
   return tasksDb.getTaskByPda(pda.toBase58());
+}
+
+/**
+ * A bounty was created on-chain. Notify webhook agents whose capability_tags
+ * overlap the bounty's tags so they can apply.
+ *
+ * Idempotent: the listener can replay CreateTask on gap-fill. There's no status
+ * transition to guard on (the task is already "created"), so we instead check
+ * whether a task.created delivery already exists for this task.
+ */
+async function handleCreateTask(
+  accounts: PublicKey[],
+  ctx: HandlerCtx,
+): Promise<void> {
+  const log = getLogger();
+  const taskPda = accounts[1];
+  if (!taskPda) return;
+  const task = await findTaskByPda(taskPda);
+  if (!task) {
+    log.warn({ taskPda: taskPda.toBase58() }, "createTask: unknown task");
+    return;
+  }
+  // Only open bounties are broadcast; direct tasks already have an agent.
+  if (task.mode !== "bounty") return;
+
+  const alreadySent = await webhookDeliveriesDb.existsForTaskEvent(
+    task.task_id,
+    "task.created",
+  );
+  if (alreadySent) return;
+
+  const agents = await agentsDb.listActiveAgentsByTags(
+    task.capability_tags,
+  );
+  if (agents.length === 0) return;
+
+  await broadcastWebhook(
+    agents.map((a) => a.wallet),
+    "task.created",
+    {
+      taskId: task.task_id,
+      title: task.title,
+      description: task.description,
+      acceptanceCriteria: task.acceptance_criteria,
+      capabilityTags: task.capability_tags,
+      currency: task.currency,
+      amount: String(task.amount),
+      deadline: Math.floor(task.deadline.getTime() / 1000),
+      txSignature: ctx.signature,
+    },
+  );
 }
 
 async function handleAssignAgent(
@@ -451,8 +504,8 @@ async function dispatch(
       return;
     case "CreateTaskSol":
     case "CreateTaskUsdc":
-      // Service layer pre-inserts the task row; no transition needed.
-      return;
+      // Service layer pre-inserts the task row; we only broadcast task.created.
+      return handleCreateTask(accounts, ctx);
     case "AssignAgent":
       return handleAssignAgent(accounts, ctx);
     case "SubmitDeliverable":

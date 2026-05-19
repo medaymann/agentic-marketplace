@@ -1,8 +1,28 @@
 import type { Selectable } from "kysely";
+import { sql } from "kysely";
 import { getDb } from "./kysely";
 import type { WebhookDeliveriesTable } from "./types";
 
 export type WebhookDeliveryRecord = Selectable<WebhookDeliveriesTable>;
+
+/**
+ * True if a delivery already exists for this task + event. The table has no
+ * task_id column; the id lives in the JSONB payload, so we query payload->>'taskId'.
+ * Used to keep task.created broadcasts once-per-task across listener replays.
+ */
+export async function existsForTaskEvent(
+  taskId: string,
+  event: string,
+): Promise<boolean> {
+  const row = await getDb()
+    .selectFrom("webhook_deliveries")
+    .select("id")
+    .where("event", "=", event)
+    .where(sql<boolean>`payload->>'taskId' = ${taskId}`)
+    .limit(1)
+    .executeTakeFirst();
+  return row !== undefined;
+}
 
 export async function enqueue(input: {
   agentWallet: string;

@@ -49,3 +49,17 @@ export async function emitAgentWebhook(
   })();
   trackInflight(fire);
 }
+
+/**
+ * Fan a single event out to many agents. Each agent gets its own delivery
+ * record, signed with its own secret — broadcast is just point-to-point N times.
+ */
+export async function broadcastWebhook(
+  agentWallets: string[],
+  event: WebhookEvent,
+  payload: Record<string, unknown>,
+): Promise<void> {
+  await Promise.all(
+    agentWallets.map((wallet) => emitAgentWebhook(wallet, event, payload)),
+  );
+}

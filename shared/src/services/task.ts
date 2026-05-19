@@ -97,6 +97,7 @@ export async function createDirectTask(
     taskPda: result.taskAccount.toBase58(),
     typedInputs,
     inputSchemaSnapshot,
+    capabilityTags: input.capabilityTags ?? [],
   });
 
   return { unsignedTx: result.tx, taskId, taskAccount: result.taskAccount, vault: result.vault };
@@ -150,6 +151,7 @@ export async function createBountyTask(
     deadline: new Date(Number(input.deadline) * 1000),
     status: "created",
     taskPda: result.taskAccount.toBase58(),
+    capabilityTags: input.capabilityTags ?? [],
   });
 
   return { unsignedTx: result.tx, taskId, taskAccount: result.taskAccount, vault: result.vault };

@@ -45,6 +45,7 @@ export interface TasksTable {
   task_pda: ColumnType<string | null, string | null | undefined, string | null>;
   typed_inputs: ColumnType<unknown | null, unknown | null | undefined, unknown | null>;
   input_schema_snapshot: ColumnType<unknown | null, unknown | null | undefined, unknown | null>;
+  capability_tags: ColumnType<string[], string[] | undefined, string[]>;
 }
 
 export interface BountyApplicationsTable {
