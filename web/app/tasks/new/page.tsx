@@ -4,9 +4,10 @@ import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useWallet, useConnection } from "@solana/wallet-adapter-react";
 import { VersionedTransaction } from "@solana/web3.js";
-import { Lock } from "lucide-react";
+import { Lock, X } from "lucide-react";
 
 type Step = "form" | "signing" | "confirming" | "done";
+type Mode = "bounty" | "direct";
 
 export default function NewTaskPage() {
   return (
@@ -22,7 +23,11 @@ function NewTaskInner() {
   const { publicKey, signTransaction } = useWallet();
   const { connection } = useConnection();
 
-  const [mode, setMode] = useState<"direct" | "bounty">("bounty");
+  // If ?assigned= is in the URL we're in direct mode, otherwise bounty
+  const [mode] = useState<Mode>(() =>
+    searchParams?.get("assigned") ? "direct" : "bounty"
+  );
+
   const [currency, setCurrency] = useState<"SOL" | "USDC">("SOL");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -32,10 +37,14 @@ function NewTaskInner() {
     const d = new Date(Date.now() + 180 * 60 * 1000);
     return d.toISOString().slice(0, 16);
   });
+
+  // Direct mode state
   const [assignedAgent, setAssignedAgent] = useState("");
+  const [resolvedAgent, setResolvedAgent] = useState<{ wallet: string; name: string } | null>(null);
   const [agentInputSchema, setAgentInputSchema] = useState<JsonSchemaObject | null>(null);
   const [agentLookupError, setAgentLookupError] = useState<string | null>(null);
   const [typedInputs, setTypedInputs] = useState<Record<string, unknown>>({});
+
   const [step, setStep] = useState<Step>("form");
   const [error, setError] = useState<string | null>(null);
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
@@ -43,47 +52,50 @@ function NewTaskInner() {
   // Pre-fill from agents page deep-link
   useEffect(() => {
     const assigned = searchParams?.get("assigned");
-    if (assigned) {
-      setMode("direct");
-      setAssignedAgent(assigned);
-    }
+    if (assigned) setAssignedAgent(assigned);
   }, [searchParams]);
 
-  // When the poster picks a direct-mode agent, look up that agent's declared
-  // input schema. If one exists, the form below renders a typed input block.
+  // Resolve agent wallet → name + input schema
   useEffect(() => {
     if (mode !== "direct" || !assignedAgent || assignedAgent.length < 32) {
+      setResolvedAgent(null);
       setAgentInputSchema(null);
       setAgentLookupError(null);
       return;
     }
     let cancelled = false;
     setAgentLookupError(null);
+    setResolvedAgent(null);
     setAgentInputSchema(null);
     (async () => {
       try {
         const res = await fetch(`/api/v1/agents/${assignedAgent}/schema`);
         if (cancelled) return;
         if (!res.ok) {
-          if (res.status === 404) {
-            setAgentLookupError("This wallet is not a registered agent.");
-          }
+          if (res.status === 404) setAgentLookupError("This wallet is not a registered agent.");
           return;
         }
         const json = await res.json();
         if (cancelled) return;
+        setResolvedAgent({ wallet: assignedAgent, name: json.name });
         if (json.inputSchema && typeof json.inputSchema === "object") {
           setAgentInputSchema(json.inputSchema as JsonSchemaObject);
           setTypedInputs({});
         }
       } catch {
-        // soft-fail: poster can still post via the generic form
+        // soft-fail
       }
     })();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [mode, assignedAgent]);
+
+  function clearAgent() {
+    setAssignedAgent("");
+    setResolvedAgent(null);
+    setAgentInputSchema(null);
+    setAgentLookupError(null);
+    setTypedInputs({});
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -117,27 +129,21 @@ function NewTaskInner() {
         mode,
         currency,
         title,
-        description,
+        description: description || title,
         acceptanceCriteria: criteria,
         amount: amountBaseUnits.toString(),
         deadline: deadlineUnix.toString(),
       };
+
       if (mode === "direct") {
         if (!assignedAgent) throw new Error("Assigned agent wallet required for direct mode");
         body.assignedAgent = assignedAgent;
 
         if (agentInputSchema) {
-          // Client-side check that required fields are filled; server still
-          // does the authoritative ajv validation.
           const missing = (agentInputSchema.required ?? []).filter(
-            (k) =>
-              typedInputs[k] === undefined ||
-              typedInputs[k] === null ||
-              typedInputs[k] === "",
+            (k) => typedInputs[k] === undefined || typedInputs[k] === null || typedInputs[k] === "",
           );
-          if (missing.length > 0) {
-            throw new Error(`Missing required input(s): ${missing.join(", ")}`);
-          }
+          if (missing.length > 0) throw new Error(`Missing required input(s): ${missing.join(", ")}`);
           body.typedInputs = typedInputs;
         }
       }
@@ -160,9 +166,7 @@ function NewTaskInner() {
 
       setStep("confirming");
       setStatusMsg("Broadcasting transaction…");
-      const sig = await connection.sendRawTransaction(signed.serialize(), {
-        skipPreflight: false,
-      });
+      const sig = await connection.sendRawTransaction(signed.serialize(), { skipPreflight: false });
 
       setStatusMsg(`Waiting for confirmation… (${sig.slice(0, 8)}…)`);
       const latest = await connection.getLatestBlockhash();
@@ -182,10 +186,15 @@ function NewTaskInner() {
   const totalLocked =
     parseFloat(amount || "0") > 0 ? (parseFloat(amount) * 1.02).toFixed(currency === "SOL" ? 4 : 2) : "0";
 
+  const isDirect = mode === "direct";
+  const hasSchema = isDirect && agentInputSchema !== null;
+
   return (
     <main className="mx-auto max-w-[760px] px-6 py-12 space-y-6">
       <div>
-        <h1 className="text-4xl font-semibold tracking-tight">Post a task</h1>
+        <h1 className="text-4xl font-semibold tracking-tight">
+          {isDirect && resolvedAgent ? `Hire ${resolvedAgent.name}` : "Post a bounty"}
+        </h1>
         <p className="mt-2 text-sm text-muted-foreground">
           Funds lock in an on-chain escrow until the task is settled, refunded, or expires.
         </p>
@@ -195,40 +204,45 @@ function NewTaskInner() {
         onSubmit={handleSubmit}
         className="relative space-y-6 rounded-2xl border border-border bg-card/40 p-8 backdrop-blur-sm"
       >
-        <div className="grid grid-cols-2 gap-3">
-          {(["bounty", "direct"] as const).map((m) => {
-            const active = mode === m;
-            return (
+        {/* Direct mode: resolved agent pill or raw input */}
+        {isDirect && (
+          resolvedAgent ? (
+            <div className="flex items-center justify-between rounded-xl border px-4 py-3"
+              style={{ borderColor: "rgba(169,120,235,0.4)", background: "rgba(169,120,235,0.06)" }}
+            >
+              <div>
+                <p className="text-sm font-medium">{resolvedAgent.name}</p>
+                <p className="font-mono text-[11px] text-muted-foreground">{resolvedAgent.wallet}</p>
+              </div>
               <button
-                key={m}
                 type="button"
-                onClick={() => setMode(m)}
+                onClick={clearAgent}
                 disabled={busy}
-                className={`relative flex flex-col items-start gap-1 rounded-xl border p-4 text-left transition-all duration-200 ${
-                  active
-                    ? "border-transparent"
-                    : "border-border hover:border-foreground/30"
-                }`}
-                style={
-                  active
-                    ? { background: "linear-gradient(135deg, rgba(169,120,235,0.12), rgba(218,91,203,0.06))", borderColor: "rgba(169,120,235,0.4)" }
-                    : {}
-                }
+                className="rounded-md p-1 text-muted-foreground hover:text-foreground transition-colors"
+                aria-label="Remove agent"
               >
-                <span
-                  className={`text-sm font-medium capitalize transition-colors ${
-                    active ? "text-foreground" : "text-muted-foreground"
-                  }`}
-                >
-                  {m}
-                </span>
-                <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-                  {m === "bounty" ? "Open to applications" : "Assigned to one agent"}
-                </span>
+                <X className="h-4 w-4" />
               </button>
-            );
-          })}
-        </div>
+            </div>
+          ) : (
+            <Field label="Assigned agent wallet" required>
+              <input
+                value={assignedAgent}
+                onChange={(e) => setAssignedAgent(e.target.value)}
+                required
+                disabled={busy}
+                placeholder="Base58 wallet address"
+                className="form-input font-mono"
+              />
+            </Field>
+          )
+        )}
+
+        {isDirect && agentLookupError && (
+          <div className="rounded-lg border border-yellow-500/40 bg-yellow-500/10 p-3 text-xs text-yellow-200">
+            {agentLookupError}
+          </div>
+        )}
 
         <Field label="Title" required>
           <input
@@ -242,18 +256,21 @@ function NewTaskInner() {
           />
         </Field>
 
-        <Field label="Description" required>
-          <textarea
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            required
-            disabled={busy}
-            maxLength={10000}
-            rows={4}
-            placeholder="What needs to be done, context, constraints…"
-            className="form-input resize-none"
-          />
-        </Field>
+        {/* Hide description when agent has a schema — typed inputs replace it */}
+        {!hasSchema && (
+          <Field label="Description" required={!isDirect}>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              required={!isDirect}
+              disabled={busy}
+              maxLength={10000}
+              rows={4}
+              placeholder="What needs to be done, context, constraints…"
+              className="form-input resize-none"
+            />
+          </Field>
+        )}
 
         <Field
           label="Acceptance criteria"
@@ -266,12 +283,32 @@ function NewTaskInner() {
             required
             disabled={busy}
             rows={5}
-            placeholder={
-              "Returns valid JSON\nIncludes all 12 fields from the schema\nUses provided fixtures unmodified"
-            }
+            placeholder={"Returns valid JSON\nIncludes all 12 fields from the schema\nUses provided fixtures unmodified"}
             className="form-input resize-none font-mono"
           />
         </Field>
+
+        {/* Agent-specific typed inputs */}
+        {hasSchema && (
+          <div className="space-y-3 rounded-xl border p-4"
+            style={{ borderColor: "rgba(169,120,235,0.4)", background: "rgba(169,120,235,0.04)" }}
+          >
+            <div className="flex items-baseline gap-2">
+              <p className="font-mono text-[11px] uppercase tracking-wider" style={{ color: "#C9B6F2" }}>
+                Agent inputs
+              </p>
+              <p className="font-mono text-[10px] text-muted-foreground/70">
+                Fill the fields this agent requires.
+              </p>
+            </div>
+            <TypedInputsForm
+              schema={agentInputSchema}
+              values={typedInputs}
+              onChange={setTypedInputs}
+              disabled={busy}
+            />
+          </div>
+        )}
 
         <div className="grid grid-cols-2 gap-4">
           <Field label="Currency">
@@ -287,11 +324,7 @@ function NewTaskInner() {
                     className={`relative rounded-md border px-3 py-2 text-sm font-mono transition-colors ${
                       active ? "border-transparent text-foreground" : "border-border text-muted-foreground"
                     }`}
-                    style={
-                      active
-                        ? { background: "linear-gradient(135deg, rgba(169,120,235,0.12), rgba(218,91,203,0.06))", borderColor: "rgba(169,120,235,0.4)" }
-                        : {}
-                    }
+                    style={active ? { background: "linear-gradient(135deg, rgba(169,120,235,0.12), rgba(218,91,203,0.06))", borderColor: "rgba(169,120,235,0.4)" } : {}}
                   >
                     {c}
                   </button>
@@ -326,46 +359,6 @@ function NewTaskInner() {
           />
         </Field>
 
-        {mode === "direct" && (
-          <Field label="Assigned agent wallet" required>
-            <input
-              value={assignedAgent}
-              onChange={(e) => setAssignedAgent(e.target.value)}
-              required
-              disabled={busy}
-              placeholder="Base58 wallet address"
-              className="form-input font-mono"
-            />
-          </Field>
-        )}
-
-        {mode === "direct" && agentLookupError && (
-          <div className="rounded-lg border border-yellow-500/40 bg-yellow-500/10 p-3 text-xs text-yellow-200">
-            {agentLookupError}
-          </div>
-        )}
-
-        {mode === "direct" && agentInputSchema && (
-          <div className="space-y-3 rounded-xl border p-4"
-            style={{ borderColor: "rgba(169,120,235,0.4)", background: "rgba(169,120,235,0.04)" }}
-          >
-            <div className="flex items-baseline gap-2">
-              <p className="font-mono text-[11px] uppercase tracking-wider" style={{ color: "#C9B6F2" }}>
-                Agent inputs
-              </p>
-              <p className="font-mono text-[10px] text-muted-foreground/70">
-                This agent requires structured inputs; fill the fields below.
-              </p>
-            </div>
-            <TypedInputsForm
-              schema={agentInputSchema}
-              values={typedInputs}
-              onChange={setTypedInputs}
-              disabled={busy}
-            />
-          </div>
-        )}
-
         <div className="rounded-xl border border-border bg-card/40 p-4 space-y-2">
           <p className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
             Escrow breakdown
@@ -376,16 +369,12 @@ function NewTaskInner() {
           </div>
           <div className="flex justify-between font-mono text-sm">
             <span className="text-muted-foreground">Platform fee (2%)</span>
-            <span>
-              {(parseFloat(amount || "0") * 0.02).toFixed(currency === "SOL" ? 4 : 2)} {currency}
-            </span>
+            <span>{(parseFloat(amount || "0") * 0.02).toFixed(currency === "SOL" ? 4 : 2)} {currency}</span>
           </div>
           <div className="my-2 h-px bg-border" />
           <div className="flex justify-between font-mono text-sm font-medium">
             <span>Total locked</span>
-            <span style={{ color: "#A978EB" }}>
-              {totalLocked} {currency}
-            </span>
+            <span style={{ color: "#A978EB" }}>{totalLocked} {currency}</span>
           </div>
         </div>
 
@@ -422,7 +411,7 @@ function NewTaskInner() {
           className="bg-brand-gradient inline-flex w-full items-center justify-center gap-2 rounded-lg px-5 py-3 text-sm font-medium text-white shadow-violet/30 transition-all duration-200 hover:shadow-violet/50 hover:scale-[1.01] active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:scale-100"
         >
           <Lock className="h-4 w-4" />
-          {step === "form" && "Create task & fund escrow"}
+          {step === "form" && (isDirect ? "Hire agent & fund escrow" : "Post bounty & fund escrow")}
           {step === "signing" && "Awaiting signature…"}
           {step === "confirming" && "Confirming on-chain…"}
           {step === "done" && "Done"}
@@ -462,10 +451,6 @@ function Field({
   );
 }
 
-/**
- * Minimal subset of JSON Schema we render. Only the field types agents in
- * practice declare for v1: string, integer, number, boolean, enum-string.
- */
 type JsonSchemaProperty = {
   type?: "string" | "integer" | "number" | "boolean";
   enum?: string[];
@@ -532,9 +517,7 @@ function TypedInputsForm({
               >
                 <option value="">(choose)</option>
                 {def.enum.map((opt) => (
-                  <option key={opt} value={opt}>
-                    {opt}
-                  </option>
+                  <option key={opt} value={opt}>{opt}</option>
                 ))}
               </select>
             </Field>
@@ -560,9 +543,7 @@ function TypedInputsForm({
         return (
           <Field key={key} label={label} required={isRequired}>
             <input
-              type={
-                def.type === "integer" || def.type === "number" ? "number" : "text"
-              }
+              type={def.type === "integer" || def.type === "number" ? "number" : "text"}
               step={def.type === "number" ? "any" : def.type === "integer" ? 1 : undefined}
               min={def.minimum}
               max={def.maximum}
@@ -573,7 +554,7 @@ function TypedInputsForm({
               disabled={disabled}
               required={isRequired}
               className="form-input font-mono"
-              placeholder={def.format ? def.format : undefined}
+              placeholder={def.format ?? undefined}
             />
           </Field>
         );

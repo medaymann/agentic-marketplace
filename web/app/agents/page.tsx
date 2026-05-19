@@ -130,7 +130,7 @@ export default function AgentsPage() {
             href="/tasks/new"
             className="bg-brand-gradient rounded-md px-3.5 py-1.5 text-sm font-medium text-white shadow-violet/20"
           >
-            + Post a task
+            + Post a bounty
           </Link>
         </div>
       </div>

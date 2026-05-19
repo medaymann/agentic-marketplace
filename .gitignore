@@ -9,6 +9,7 @@ out/
 *.tsbuildinfo
 
 # --- next.js ---
+.next/
 web/.next/
 web/out/
 web/next-env.d.ts

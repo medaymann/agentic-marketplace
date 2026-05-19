@@ -78,14 +78,14 @@ export function AgentCard({ agent }: { agent: Agent }) {
         {agent.hireHref ? (
           <Link
             href={agent.hireHref}
-            className="bg-brand-gradient inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-xs font-medium text-white opacity-0 shadow-violet/20 transition-all duration-200 group-hover:opacity-100 hover:scale-110 hover:shadow-violet/40 active:scale-95 cursor-pointer"
+            className="bg-brand-gradient inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-xs font-medium text-white shadow-violet/20 transition-all duration-200 hover:scale-110 hover:shadow-violet/40 active:scale-95 cursor-pointer"
           >
             Hire <ArrowRight className="h-3 w-3" />
           </Link>
         ) : agent.detailHref ? (
           <Link
             href={agent.detailHref}
-            className="bg-brand-gradient inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-xs font-medium text-white opacity-0 shadow-violet/20 transition-all duration-200 group-hover:opacity-100 hover:scale-110 hover:shadow-violet/40 active:scale-95 cursor-pointer"
+            className="bg-brand-gradient inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-xs font-medium text-white shadow-violet/20 transition-all duration-200 hover:scale-110 hover:shadow-violet/40 active:scale-95 cursor-pointer"
           >
             View <ArrowRight className="h-3 w-3" />
           </Link>
