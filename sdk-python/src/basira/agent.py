@@ -35,6 +35,7 @@ import hmac
 import hashlib
 import json
 import logging
+import mimetypes
 import os
 import time
 from dataclasses import dataclass
@@ -94,9 +95,26 @@ class Task:
     deadline: Optional[int] = None
 
 
-SyncHandler = Callable[[Task], Union[str, None]]
-AsyncHandler = Callable[[Task], Awaitable[Union[str, None]]]
+@dataclass
+class Deliverable:
+    """A richer handler result. Return this from @on_task to attach files or
+    external links alongside (or instead of) the text write-up. Returning a
+    plain string still works and is equivalent to Deliverable(text=...).
+
+    `files` are local paths the SDK uploads to the platform's storage before
+    submitting (presigned PUT + sha256, over REST). Caps: 20 files, 50MB each.
+    """
+    text: str = ""
+    files: Optional[list[str]] = None
+    external_links: Optional[list[dict]] = None  # [{"url": ..., "label"?: ...}]
+
+
+SyncHandler = Callable[[Task], Union[str, "Deliverable", None]]
+AsyncHandler = Callable[[Task], Awaitable[Union[str, "Deliverable", None]]]
 Handler = Union[SyncHandler, AsyncHandler]
+
+MAX_FILES = 20
+MAX_FILE_BYTES = 50 * 1024 * 1024
 
 
 class Agent:
@@ -282,21 +300,48 @@ class Agent:
         result = self._handler(task)
         if asyncio.iscoroutine(result):
             result = await result
-        if not isinstance(result, str) or not result:
+
+        # Normalize the handler result: a plain string is shorthand for
+        # Deliverable(text=...); a Deliverable may carry files + links.
+        if result is None:
+            deliverable = None
+        elif isinstance(result, str):
+            deliverable = Deliverable(text=result)
+        elif isinstance(result, Deliverable):
+            deliverable = result
+        else:
+            log.warning(
+                "handler returned %s for task %s; expected str or Deliverable",
+                type(result).__name__, task.task_id,
+            )
+            return
+
+        file_paths = deliverable.files or [] if deliverable else []
+        if deliverable is None or (not deliverable.text and not file_paths
+                                   and not (deliverable.external_links or [])):
             log.warning("handler returned no content for task %s; nothing to submit", task.task_id)
             return
+
+        # Upload any files first (presigned PUT + sha256), then submit the
+        # deliverable referencing them by key. All over REST with the API key.
+        uploaded = await self._upload_files(task.task_id, file_paths)
 
         log.info("submitting deliverable for task %s", task.task_id)
         # The platform signs + broadcasts the on-chain submission for us.
         # The response is just an ack with the tx signature.
         ack = await self._rest_post(
             f"/api/v1/tasks/{task.task_id}/submit",
-            {"contentText": result},
+            {
+                "contentText": deliverable.text,
+                "files": uploaded,
+                "externalLinks": deliverable.external_links or [],
+            },
         )
         log.info(
-            "submitted task %s (deliverableId=%s, tx=%s)",
+            "submitted task %s (deliverableId=%s, files=%d, tx=%s)",
             task.task_id,
             ack.get("deliverableId"),
+            len(uploaded),
             ack.get("txSignature"),
         )
 
@@ -326,6 +371,59 @@ class Agent:
                     msg = (resp.get("error") or {}).get("message") or await r.text()
                     raise RuntimeError(f"POST {path} HTTP {r.status}: {msg}")
                 return resp if isinstance(resp, dict) else {}
+
+    async def _upload_files(self, task_id: str, paths: list[str]) -> list[dict]:
+        """Upload local files to the platform's storage and return the files[]
+        entries to include on submit. For each file: request a presigned PUT
+        URL (REST), upload the bytes, and report name/size/sha256/key.
+        """
+        if not paths:
+            return []
+        if len(paths) > MAX_FILES:
+            raise RuntimeError(f"too many files: {len(paths)} (max {MAX_FILES})")
+
+        entries: list[dict] = []
+        timeout = aiohttp.ClientTimeout(total=300)
+        async with aiohttp.ClientSession(timeout=timeout) as sess:
+            for path in paths:
+                with open(path, "rb") as fh:
+                    data = fh.read()
+                if len(data) > MAX_FILE_BYTES:
+                    raise RuntimeError(
+                        f"{path} is {len(data)} bytes (max {MAX_FILE_BYTES})"
+                    )
+                name = os.path.basename(path)
+                content_type = mimetypes.guess_type(name)[0] or "application/octet-stream"
+                sha256 = hashlib.sha256(data).hexdigest()
+
+                # 1. Presigned PUT URL (REST, API-key auth).
+                presign = await self._rest_post(
+                    f"/api/v1/tasks/{task_id}/deliverable/upload-url",
+                    {"filename": name, "contentType": content_type, "sizeBytes": len(data)},
+                )
+                put_url = presign.get("url")
+                key = presign.get("key")
+                if not put_url or not key:
+                    raise RuntimeError(f"bad presign response for {name}: {presign}")
+
+                # 2. Upload the raw bytes straight to storage.
+                async with sess.put(
+                    put_url, data=data, headers={"Content-Type": content_type}
+                ) as up:
+                    if up.status >= 300:
+                        raise RuntimeError(
+                            f"upload PUT for {name} failed: HTTP {up.status}"
+                        )
+
+                entries.append({
+                    "key": key,
+                    "name": name,
+                    "contentType": content_type,
+                    "sizeBytes": len(data),
+                    "sha256": sha256,
+                })
+                log.info("uploaded %s (%d bytes)", name, len(data))
+        return entries
 
     async def _fetch_task(self, task_id: str) -> Optional[dict]:
         async with aiohttp.ClientSession() as sess:
