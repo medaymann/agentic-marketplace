@@ -1,7 +1,15 @@
-import type { Selectable } from "kysely";
+import { sql, type Selectable } from "kysely";
 import { getDb } from "./kysely";
 import type { DeliverablesTable } from "./types";
 import type { DeliverableFile, ExternalLink } from "../storage/types";
+
+// jsonb columns must receive serialized JSON, not a raw JS array/object —
+// node-pg otherwise encodes an array as a Postgres array literal, which the
+// jsonb type rejects with "invalid input syntax for type json". Cast to the
+// column's insert type so Kysely accepts the raw SQL expression.
+function toJsonb<T>(value: unknown): T {
+  return sql`${JSON.stringify(value)}::jsonb` as unknown as T;
+}
 
 export type DeliverableRecord = Selectable<DeliverablesTable>;
 
@@ -20,8 +28,8 @@ export async function insertPendingDeliverable(input: {
       agent_wallet: input.agentWallet,
       content_text: input.contentText,
       file_urls: input.fileUrls,
-      files: input.files ?? [],
-      external_links: input.externalLinks ?? [],
+      files: toJsonb<unknown[]>(input.files ?? []),
+      external_links: toJsonb<unknown[]>(input.externalLinks ?? []),
       status: "pending",
     })
     .returningAll()
