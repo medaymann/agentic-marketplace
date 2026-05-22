@@ -17,7 +17,11 @@ The SDK handles:
   - the webhook HTTP listener at /basira/<event>
   - HMAC-SHA256 signature verification on every request
   - applying to bounties (task.created) and accepting work (task.offered)
-  - calling Basira's MCP tools (apply_to_bounty, submit_deliverable)
+  - calling Basira's REST API (apply / submit) with API-key auth
+
+This deterministic SDK talks to the platform over plain REST. MCP exists for
+LLM-driven agents that reason about which action to take; a fixed
+webhook → handler → submit pipeline doesn't need tool discovery.
 
 Notably, the SDK does *not* hold a Solana private key. The platform signs the
 on-chain submission tx on your behalf — your agent only ever needs an API key
@@ -44,6 +48,34 @@ log = logging.getLogger("basira-agent")
 DEFAULT_BASIRA_URL = "https://basira.xyz"
 
 WEBHOOK_AGE_TOLERANCE_S = 5 * 60
+
+
+def _load_dotenv() -> None:
+    """Load a local .env (or .env.basira) into os.environ if present.
+
+    The onboarding CLI writes credentials to one of these files, so the agent
+    runs without a manual `export`. Real environment variables always win — we
+    never overwrite a key that's already set. Tiny built-in parser; no extra
+    dependency. Lines are `KEY=VALUE`; blank lines and `#` comments ignored.
+    """
+    for name in (".env", ".env.basira"):
+        path = os.path.join(os.getcwd(), name)
+        if not os.path.isfile(path):
+            continue
+        try:
+            with open(path, encoding="utf-8") as f:
+                for raw in f:
+                    line = raw.strip()
+                    if not line or line.startswith("#") or "=" not in line:
+                        continue
+                    key, _, value = line.partition("=")
+                    key = key.strip()
+                    value = value.strip().strip('"').strip("'")
+                    if key and key not in os.environ:
+                        os.environ[key] = value
+        except OSError:
+            # A missing/unreadable .env is not fatal — fall back to real env.
+            continue
 
 
 @dataclass
@@ -94,6 +126,9 @@ class Agent:
 
     @classmethod
     def from_env(cls) -> "Agent":
+        # Pick up credentials from a local .env (written by `npm run onboard`)
+        # if present; real env vars take precedence.
+        _load_dotenv()
         try:
             return cls(
                 api_key=os.environ["BASIRA_API_KEY"],
@@ -229,9 +264,9 @@ class Agent:
             log.info("skipping bounty %s (filter said no)", task.task_id)
             return
         log.info("applying to bounty %s", task.task_id)
-        await self._mcp_call(
-            "apply_to_bounty",
-            {"task_id": task.task_id, "message": f"Picking up {task.title or task.task_id}"},
+        await self._rest_post(
+            f"/api/v1/bounties/{task.task_id}/apply",
+            {"message": f"Picking up {task.title or task.task_id}"},
         )
 
     async def _handle_offered(self, task: Task) -> None:
@@ -254,9 +289,9 @@ class Agent:
         log.info("submitting deliverable for task %s", task.task_id)
         # The platform signs + broadcasts the on-chain submission for us.
         # The response is just an ack with the tx signature.
-        ack = await self._mcp_call(
-            "submit_deliverable",
-            {"task_id": task.task_id, "content_text": result},
+        ack = await self._rest_post(
+            f"/api/v1/tasks/{task.task_id}/submit",
+            {"contentText": result},
         )
         log.info(
             "submitted task %s (deliverableId=%s, tx=%s)",
@@ -265,41 +300,32 @@ class Agent:
             ack.get("txSignature"),
         )
 
-    # ----- HTTP helpers (MCP via JSON-RPC over /mcp) -----------------------
+    # ----- HTTP helpers (REST over the platform API) -----------------------
 
-    async def _mcp_call(self, name: str, arguments: dict) -> dict:
-        """Call a Basira MCP tool. Returns the parsed JSON object from the text content."""
-        body = {
-            "jsonrpc": "2.0",
-            "id": int(time.time() * 1000),
-            "method": "tools/call",
-            "params": {"name": name, "arguments": arguments},
-        }
+    async def _rest_post(self, path: str, body: dict) -> dict:
+        """POST to a Basira REST endpoint with API-key auth. Returns parsed JSON.
+
+        The deterministic SDK talks to the platform over plain REST. (LLM agents
+        that reason about which action to take use the MCP server instead.)
+        """
         timeout = aiohttp.ClientTimeout(total=60)
         async with aiohttp.ClientSession(timeout=timeout) as sess:
             async with sess.post(
-                f"{self.basira_url}/mcp",
+                f"{self.basira_url}{path}",
                 headers={
                     "Authorization": f"Bearer {self.api_key}",
                     "Content-Type": "application/json",
-                    "Accept": "application/json, text/event-stream",
                 },
                 json=body,
             ) as r:
-                if r.status != 200:
-                    text = await r.text()
-                    raise RuntimeError(f"mcp {name} HTTP {r.status}: {text}")
-                resp = await r.json()
-        if "error" in resp:
-            raise RuntimeError(f"mcp {name} error: {resp['error']}")
-        result = resp.get("result", {})
-        if result.get("isError"):
-            inner = result.get("content", [{}])[0].get("text", "")
-            raise RuntimeError(f"mcp {name} tool error: {inner}")
-        try:
-            return json.loads(result["content"][0]["text"])
-        except (KeyError, ValueError, IndexError) as e:
-            raise RuntimeError(f"mcp {name} bad response shape: {resp}") from e
+                try:
+                    resp = await r.json()
+                except (aiohttp.ContentTypeError, ValueError):
+                    resp = {}
+                if r.status >= 400:
+                    msg = (resp.get("error") or {}).get("message") or await r.text()
+                    raise RuntimeError(f"POST {path} HTTP {r.status}: {msg}")
+                return resp if isinstance(resp, dict) else {}
 
     async def _fetch_task(self, task_id: str) -> Optional[dict]:
         async with aiohttp.ClientSession() as sess:

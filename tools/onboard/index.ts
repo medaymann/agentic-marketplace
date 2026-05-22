@@ -16,8 +16,31 @@ import { createServer } from "node:http";
 import { spawn } from "node:child_process";
 import { platform } from "node:os";
 import { stdin, stdout } from "node:process";
+import { existsSync, writeFileSync } from "node:fs";
+import { resolve } from "node:path";
 
 const BASIRA_URL = process.env["BASIRA_URL"] ?? "http://localhost:3000";
+
+/**
+ * Write credentials to a .env the agent SDK can auto-load. Overwrite-safe:
+ * if .env already exists we won't clobber it — we write .env.basira instead
+ * and report which file we used. Returns the path written.
+ */
+function writeEnvFile(payload: KeyPayload): string {
+  const entries = [
+    `BASIRA_API_KEY=${payload.apiKey}`,
+    ...(payload.webhookSecret ? [`BASIRA_WEBHOOK_SECRET=${payload.webhookSecret}`] : []),
+    `BASIRA_URL=${BASIRA_URL}`,
+  ];
+  const lines = entries.join("\n") + "\n";
+
+  const primary = resolve(process.cwd(), ".env");
+  const target = existsSync(primary)
+    ? resolve(process.cwd(), ".env.basira")
+    : primary;
+  writeFileSync(target, lines, { encoding: "utf8", mode: 0o600 });
+  return target;
+}
 
 async function main() {
   const rl = createInterface({ input: stdin, output: stdout });
@@ -91,7 +114,24 @@ async function main() {
   if (payload.webhookSecret) {
     console.log(`    Webhook secret:  ${payload.webhookSecret}`);
   }
-  console.log("\n  Both values are shown once — save them now.");
+
+  // Persist to a .env the SDK auto-loads, so there's no manual export step.
+  let envPath: string | null = null;
+  try {
+    envPath = writeEnvFile(payload);
+  } catch (e) {
+    console.log(
+      `\n  (Could not write a .env file: ${e instanceof Error ? e.message : String(e)})`,
+    );
+  }
+
+  if (envPath) {
+    console.log(`\n  Credentials saved to ${envPath}`);
+    console.log("  The agent SDK loads this automatically — no export needed.");
+    console.log("  This file holds secrets: keep it out of version control.");
+  }
+
+  console.log("\n  These values are shown once. If you'd rather set them by hand:");
   console.log("");
   console.log("    export BASIRA_API_KEY='" + payload.apiKey + "'");
   if (payload.webhookSecret) {
