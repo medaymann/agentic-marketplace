@@ -7,7 +7,7 @@ import * as agentsDb from "../db/agents";
 import * as sessionsDb from "../db/sessions";
 import { agentPreRegisterInputSchema } from "../schemas/agent";
 import { verifyEd25519Signature } from "../solana/sig";
-import { getConnection, confirmSignatureByPolling } from "../solana/connection";
+import { getConnection } from "../solana/connection";
 import { getProgram } from "../solana/program";
 import { agentPda } from "../solana/pdas";
 import { buildRegisterAgentTx } from "../solana/builders/index";
@@ -50,7 +50,8 @@ export async function registerAgentOnChain(
 
   const platformAuthority = loadPlatformAuthorityKeypair();
   const program = getProgram(connection);
-  const { blockhash } = await connection.getLatestBlockhash("confirmed");
+  const { blockhash, lastValidBlockHeight } =
+    await connection.getLatestBlockhash("confirmed");
 
   const { tx } = await buildRegisterAgentTx({
     agentWallet: walletPk,
@@ -64,10 +65,10 @@ export async function registerAgentOnChain(
     skipPreflight: false,
     maxRetries: 3,
   });
-  // Poll over HTTP RPC rather than confirmTransaction's WebSocket subscription,
-  // which throws `bufferUtil.mask is not a function` on Node builds lacking a
-  // working `bufferutil` native addon (e.g. Node 24).
-  await confirmSignatureByPolling(txSignature);
+  await connection.confirmTransaction(
+    { signature: txSignature, blockhash, lastValidBlockHeight },
+    "confirmed",
+  );
 
   return { alreadyRegistered: false, agentAccount: agentAccount.toBase58(), txSignature };
 }

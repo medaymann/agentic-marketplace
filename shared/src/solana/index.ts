@@ -2,7 +2,7 @@ export { BASIRA_PROGRAM_ID } from "./program-id";
 export * from "./constants";
 export * from "./units";
 export * from "./pdas";
-export { getConnection, getLatestBlockhashWithRetry, confirmSignatureByPolling } from "./connection";
+export { getConnection, getLatestBlockhashWithRetry } from "./connection";
 export { getProgram, getProgramId } from "./program";
 export * from "./accounts";
 export * from "./sig";

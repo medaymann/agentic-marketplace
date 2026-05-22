@@ -28,8 +28,10 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "bufferutil": "^4.1.0",
     "eslint": "^10.3.0",
     "globals": "^17.6.0",
-    "typescript-eslint": "^8.59.2"
+    "typescript-eslint": "^8.59.2",
+    "utf-8-validate": "^6.0.6"
   }
 }

@@ -26,35 +26,3 @@ export async function getLatestBlockhashWithRetry(retries = 3): Promise<string> 
   }
   throw lastErr;
 }
-
-/**
- * Confirm a signature by polling getSignatureStatus instead of opening a
- * WebSocket subscription. connection.confirmTransaction() relies on the `ws`
- * library's native `bufferutil` addon, which is absent/broken on some Node
- * builds (e.g. Node 24) and throws `bufferUtil.mask is not a function`. Polling
- * over plain HTTP RPC avoids that entirely. Throws if the tx errors on-chain or
- * the timeout elapses.
- */
-export async function confirmSignatureByPolling(
-  signature: string,
-  { timeoutMs = 60_000, intervalMs = 1_000 } = {},
-): Promise<void> {
-  const conn = getConnection();
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    const { value } = await conn.getSignatureStatus(signature, {
-      searchTransactionHistory: true,
-    });
-    if (value) {
-      if (value.err) {
-        throw new Error(
-          `Transaction ${signature} failed on-chain: ${JSON.stringify(value.err)}`,
-        );
-      }
-      const status = value.confirmationStatus;
-      if (status === "confirmed" || status === "finalized") return;
-    }
-    await new Promise((r) => setTimeout(r, intervalMs));
-  }
-  throw new Error(`Timed out confirming transaction ${signature}`);
-}
