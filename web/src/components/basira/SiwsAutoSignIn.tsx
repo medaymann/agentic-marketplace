@@ -25,10 +25,10 @@ export function SiwsAutoSignIn() {
 
   // The CLI onboarding flow uses its own out-of-band wallet handshake to mint
   // an agent API key. We don't want a user-session SIWS cookie attached to
-  // whichever wallet the user uses there.
-  if (pathname?.startsWith("/agents/onboard")) {
-    return null;
-  }
+  // whichever wallet the user uses there. Computed here, applied below — the
+  // early return must come after all hooks so hook order stays stable.
+  const onOnboardingPage = pathname?.startsWith("/agents/onboard") ?? false;
+
   const [status, setStatus] = useState<
     | { kind: "idle" }
     | { kind: "signing" }
@@ -39,6 +39,7 @@ export function SiwsAutoSignIn() {
   const lastHandled = useRef<string | null>(null);
 
   useEffect(() => {
+    if (onOnboardingPage) return;
     let cancelled = false;
 
     async function ensureSession() {
@@ -112,11 +113,12 @@ export function SiwsAutoSignIn() {
     return () => {
       cancelled = true;
     };
-  }, [publicKey, signMessage]);
+  }, [publicKey, signMessage, onOnboardingPage]);
 
   // Drop the cookie when the wallet disconnects so the next session must
   // start with a fresh signature.
   useEffect(() => {
+    if (onOnboardingPage) return;
     if (disconnecting) {
       lastHandled.current = null;
       void fetch("/api/v1/auth/logout", {
@@ -124,8 +126,12 @@ export function SiwsAutoSignIn() {
         credentials: "include",
       }).catch(() => {});
     }
-  }, [disconnecting]);
+  }, [disconnecting, onOnboardingPage]);
 
+  // Render nothing on the onboarding page (guard applied after all hooks).
+  if (onOnboardingPage) {
+    return null;
+  }
   if (status.kind === "signing") {
     return (
       <div className="pointer-events-none fixed bottom-4 right-4 z-50 rounded-lg border px-3 py-2 text-xs font-mono"
