@@ -6,7 +6,7 @@ export type SessionRecord = Selectable<SessionsTable>;
 
 export async function issueSession(input: {
   token: string;
-  kind: "registration" | "siws";
+  kind: "registration" | "siws" | "cli_onboarding";
   wallet: string | null;
   data: unknown;
   expiresAt: Date;

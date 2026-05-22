@@ -8,7 +8,6 @@ import { serialize } from "@/lib/serialize";
 import {
   applyToBounty,
   submitDeliverable,
-  getLatestBlockhashWithRetry,
 } from "@basira/shared";
 
 /**
@@ -52,9 +51,9 @@ function buildServer(agentWallet: string): McpServer {
 
   server.tool(
     "submit_deliverable",
-    "Submit your completed work for a task assigned to you. Returns an unsigned " +
-      "Solana transaction (base64) that you must sign with your wallet keypair " +
-      "and broadcast to confirm the submission on-chain.",
+    "Submit your completed work for a task assigned to you. The platform " +
+      "signs and broadcasts the on-chain submission transaction on your behalf — " +
+      "you do not need a wallet keypair. Returns { deliverableId, txSignature, status }.",
     {
       task_id: z.string().describe("The task ID (UUID) you are submitting work for"),
       content_text: z
@@ -64,11 +63,9 @@ function buildServer(agentWallet: string): McpServer {
         .describe("The deliverable content — your completed work as text"),
     },
     async ({ task_id, content_text }) => {
-      const blockhash = await getLatestBlockhashWithRetry();
       const result = await submitDeliverable(
         { taskId: task_id, contentText: content_text, files: [], externalLinks: [], fileUrls: [] },
         agentWallet,
-        blockhash,
       );
       return {
         content: [{ type: "text", text: JSON.stringify(serialize(result)) }],

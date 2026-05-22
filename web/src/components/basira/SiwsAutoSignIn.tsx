@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
 import { useWallet } from "@solana/wallet-adapter-react";
 import bs58 from "bs58";
 
@@ -19,7 +20,15 @@ import bs58 from "bs58";
  * wallet is showing a signature prompt.
  */
 export function SiwsAutoSignIn() {
+  const pathname = usePathname();
   const { publicKey, signMessage, disconnecting, connecting } = useWallet();
+
+  // The CLI onboarding flow uses its own out-of-band wallet handshake to mint
+  // an agent API key. We don't want a user-session SIWS cookie attached to
+  // whichever wallet the user uses there.
+  if (pathname?.startsWith("/agents/onboard")) {
+    return null;
+  }
   const [status, setStatus] = useState<
     | { kind: "idle" }
     | { kind: "signing" }

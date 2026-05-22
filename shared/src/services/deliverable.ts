@@ -1,5 +1,3 @@
-import { PublicKey } from "@solana/web3.js";
-import type { VersionedTransaction } from "@solana/web3.js";
 import * as deliverablesDb from "../db/deliverables";
 import * as tasksDb from "../db/tasks";
 import {
@@ -15,6 +13,7 @@ import { getPublicBase } from "../storage/client";
 import { getConnection } from "../solana/connection";
 import { getProgram } from "../solana/program";
 import { buildSubmitDeliverableTx } from "../solana/builders/index";
+import { loadPlatformAuthorityKeypair } from "../solana/keys";
 import type {
   PresignedUpload,
   PresignedDownload,
@@ -64,14 +63,21 @@ export async function getDeliverableDownloadUrl(input: {
 }
 
 export interface SubmitDeliverableResult {
-  unsignedTx: VersionedTransaction;
   deliverableId: string;
+  txSignature: string;
+  status: "submitted";
 }
 
+/**
+ * Off-chain auth has already established that `agentWallet` is the calling
+ * agent. We do the database side effects (insert + confirm deliverable,
+ * transition task status), then build, sign, and broadcast the on-chain
+ * submit_deliverable tx using the platform authority keypair. Agents no
+ * longer touch any signing material.
+ */
 export async function submitDeliverable(
   rawInput: unknown,
   agentWallet: string,
-  recentBlockhash: string,
 ): Promise<SubmitDeliverableResult> {
   const input = deliverableSubmitInputSchema.parse(rawInput);
 
@@ -80,17 +86,12 @@ export async function submitDeliverable(
   if (task.assigned_agent !== agentWallet) throw new Error("Not the assigned agent");
   if (task.status !== "assigned") throw new Error(`Task is not in assigned status: ${task.status}`);
 
-  // Off-chain deadline check — fast feedback before tx build
+  // Off-chain deadline check — fast feedback before tx build.
   if (new Date() > task.deadline) {
     throw new Error("Task deadline has passed");
   }
 
   // Hash-verify every uploaded file against R2 before any tx build or DB write.
-  // - Confirms each key actually exists at the address the agent claims.
-  // - Confirms the bytes the agent hashed locally match what's stored.
-  // - Confirms the key belongs to *this* task's namespace.
-  // Skipped in mock mode (fetchObjectBytes returns null) so verify scripts
-  // and local tests don't need a real R2 bucket.
   const keyPrefix = `tasks/${input.taskId}/`;
   const verifiedFiles: DeliverableFile[] = [];
   for (const file of input.files) {
@@ -116,18 +117,10 @@ export async function submitDeliverable(
     ...input.fileUrls,
   ];
 
-  const agent = new PublicKey(agentWallet);
-  const connection = getConnection();
-  const program = getProgram(connection);
-
-  const { tx } = await buildSubmitDeliverableTx({
-    taskIdUuid: input.taskId,
-    agent,
-    payer: agent,
-    recentBlockhash,
-    program,
-  });
-
+  // Persist the deliverable FIRST — before any slow on-chain work — so the
+  // agent's content can never be lost to a tx timeout or client disconnect.
+  // Inserted as "pending"; the chain listener confirms it once the on-chain
+  // submit lands (via deliverablesDb.confirmLatestForTask).
   const deliverable = await deliverablesDb.insertPendingDeliverable({
     taskId: input.taskId,
     agentWallet,
@@ -137,10 +130,28 @@ export async function submitDeliverable(
     externalLinks: input.externalLinks,
   });
 
-  await deliverablesDb.confirmDeliverable(deliverable.id);
-  await tasksDb.transitionStatus(input.taskId, "assigned", "submitted", {
-    submitted_at: new Date(),
+  // Build + sign + broadcast on the platform authority's behalf, with a fresh
+  // blockhash. We do NOT block on confirmation — the daemon's chain listener
+  // observes the tx, transitions the task to "submitted", confirms the
+  // deliverable, and triggers the judge. Blocking here made the call take
+  // 5+ minutes on a congested devnet and risked the client timing out.
+  const platformAuthority = loadPlatformAuthorityKeypair();
+  const connection = getConnection();
+  const program = getProgram(connection);
+
+  const { blockhash } = await connection.getLatestBlockhash("confirmed");
+  const { tx } = await buildSubmitDeliverableTx({
+    taskIdUuid: input.taskId,
+    platformAuthority: platformAuthority.publicKey,
+    recentBlockhash: blockhash,
+    program,
+  });
+  tx.sign([platformAuthority]);
+
+  const txSignature = await connection.sendTransaction(tx, {
+    skipPreflight: false,
+    maxRetries: 3,
   });
 
-  return { unsignedTx: tx, deliverableId: deliverable.id };
+  return { deliverableId: deliverable.id, txSignature, status: "submitted" };
 }

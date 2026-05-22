@@ -1,15 +1,14 @@
-import { randomBytes } from "node:crypto";
-import bs58 from "bs58";
-import {
-  agentsDb,
-  signWebhookBody,
-  verifyEd25519Signature,
-} from "@basira/shared";
+import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { agentsDb, signWebhookBody } from "@basira/shared";
 import { getLogger } from "../log.js";
-import { loadArbitratorKeypair } from "../keys.js";
 
 const HEALTH_TIMEOUT_MS = 10_000;
 const MAX_FAILURES = 3;
+
+/** HMAC-SHA256(secret, nonce) — the agent's expected health-check response. */
+function hmacNonce(secret: string, nonce: string): string {
+  return createHmac("sha256", secret).update(nonce).digest("hex");
+}
 
 export interface SweepResult {
   checked: number;
@@ -21,7 +20,9 @@ export interface SweepResult {
 interface AgentHealthResponse {
   protocol_version?: string;
   status?: string;
-  signed_nonce?: string;
+  // HMAC-SHA256(webhook_secret, nonce) — proves the agent holds the shared
+  // secret without needing a Solana keypair.
+  nonce_hmac?: string;
 }
 
 async function pingAgent(
@@ -56,39 +57,34 @@ export async function runHealthCheckSweep(): Promise<SweepResult> {
 
   if (agents.length === 0) return { checked: 0, ok, failed, deactivated };
 
-  const arbitrator = loadArbitratorKeypair();
-
   for (const agent of agents) {
     try {
+      const secret = agent.webhook_secret ?? "";
       const nonce = randomBytes(16).toString("hex");
       const timestamp = String(Math.floor(Date.now() / 1000));
-      // Basira's signature: HMAC over `${timestamp}.${nonce}` keyed by agent's webhook_secret.
-      // (Matches webhook signing — agent verifies with its copy of the secret.)
-      const sigInput = signWebhookBody(agent.webhook_secret ?? "", timestamp, nonce);
+      // Challenge: HMAC over `${timestamp}.${nonce}` keyed by the agent's
+      // webhook_secret — same scheme as webhook signing.
+      const challengeSig = signWebhookBody(secret, timestamp, nonce);
 
       const response = await pingAgent(agent.endpoint_url, {
         nonce,
         timestamp,
-        signature: sigInput,
+        signature: challengeSig,
       });
 
-      if (response.status !== "ok" || !response.signed_nonce) {
-        throw new Error("agent did not return signed_nonce");
+      if (response.status !== "ok" || !response.nonce_hmac) {
+        throw new Error("agent did not return nonce_hmac");
       }
-      // Verify the agent's signature over the nonce against its wallet.
-      const sigBytes = bs58.decode(response.signed_nonce);
-      const ok2 = verifyEd25519Signature(
-        new TextEncoder().encode(nonce),
-        sigBytes,
-        bs58.decode(agent.wallet),
-      );
-      if (!ok2) throw new Error("invalid signature on nonce");
+      // The agent proves liveness + secret possession by returning
+      // HMAC-SHA256(webhook_secret, nonce). No Solana keypair involved.
+      const got = Buffer.from(response.nonce_hmac, "hex");
+      const want = Buffer.from(hmacNonce(secret, nonce), "hex");
+      if (got.length !== want.length || !timingSafeEqual(got, want)) {
+        throw new Error("invalid nonce_hmac");
+      }
 
       await agentsDb.recordHealthCheck(agent.wallet, new Date());
       ok++;
-      // Suppress unused-var warning for arbitrator (reserved for future use as
-      // the registrar key; currently we sign with the agent's own webhook secret).
-      void arbitrator;
     } catch (err) {
       const failures = await agentsDb.incrementHealthFailure(agent.wallet);
       log.warn(

@@ -24,7 +24,6 @@ export const agentVerifySignatureInputSchema = z.object({
 
 export const agentRegisterCompleteInputSchema = z.object({
   sessionToken: z.string().min(16),
-  signedRegisterAgentTxBase64: z.string().min(1),
 });
 
 export const agentRotateApiKeyInputSchema = z.object({

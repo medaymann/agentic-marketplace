@@ -65,21 +65,34 @@ describe("basira", () => {
     await provider.connection.confirmTransaction(sig, "confirmed");
   }
 
+  // register_agent is now keeper-signed: the platform authority (KEEPER_KP)
+  // signs and pays; the agent wallet is passed as an argument. Agents never
+  // sign or hold SOL for registration.
+  async function registerAgentByKeeper(agentWallet: PublicKey) {
+    await program.methods
+      .registerAgent(agentWallet)
+      .accounts({ platformAuthority: KEEPER_KP.publicKey })
+      .signers([KEEPER_KP])
+      .rpc();
+  }
+
+  // Fund the keeper once — it pays fees + rent for every keeper-signed
+  // instruction (register_agent, submit_deliverable, sweeps).
+  before(async () => {
+    await fund(KEEPER_KP, 10 * LAMPORTS_PER_SOL);
+  });
+
   describe("register_agent", () => {
-    it("creates an AgentAccount PDA with default reputation", async () => {
+    it("creates an AgentAccount PDA with default reputation (keeper-signed)", async () => {
+      // Agent never signs or holds SOL — the keeper registers on its behalf.
       const agent = Keypair.generate();
-      await fund(agent, 2 * LAMPORTS_PER_SOL);
 
       const [agentPda, expectedBump] = PublicKey.findProgramAddressSync(
         [AGENT_SEED, agent.publicKey.toBuffer()],
         program.programId,
       );
 
-      await program.methods
-        .registerAgent()
-        .accounts({ wallet: agent.publicKey })
-        .signers([agent])
-        .rpc();
+      await registerAgentByKeeper(agent.publicKey);
 
       const account = await program.account.agentAccount.fetch(agentPda);
 
@@ -93,24 +106,34 @@ describe("basira", () => {
 
     it("rejects re-registration of the same wallet", async () => {
       const agent = Keypair.generate();
-      await fund(agent, 2 * LAMPORTS_PER_SOL);
 
-      await program.methods
-        .registerAgent()
-        .accounts({ wallet: agent.publicKey })
-        .signers([agent])
-        .rpc();
+      await registerAgentByKeeper(agent.publicKey);
 
       try {
-        await program.methods
-          .registerAgent()
-          .accounts({ wallet: agent.publicKey })
-          .signers([agent])
-          .rpc();
+        await registerAgentByKeeper(agent.publicKey);
         assert.fail("expected re-registration to fail");
       } catch (err) {
         const msg = String(err);
         assert.match(msg, /already in use|custom program error: 0x0/i, msg);
+      }
+    });
+
+    it("rejects registration signed by a non-keeper", async () => {
+      const agent = Keypair.generate();
+      const impostor = Keypair.generate();
+      await fund(impostor, 2 * LAMPORTS_PER_SOL);
+
+      try {
+        await program.methods
+          .registerAgent(agent.publicKey)
+          .accounts({ platformAuthority: impostor.publicKey })
+          .signers([impostor])
+          .rpc();
+        assert.fail("expected non-keeper registration to fail");
+      } catch (err) {
+        const msg = String(err);
+        // address-constraint violation on platform_authority
+        assert.match(msg, /NotPlatformAuthority|ConstraintAddress|custom program error/i, msg);
       }
     });
   });
@@ -382,11 +405,7 @@ describe("basira", () => {
       await fund(poster);
       await fund(agent);
 
-      await program.methods
-        .registerAgent()
-        .accounts({ wallet: agent.publicKey })
-        .signers([agent])
-        .rpc();
+      await registerAgentByKeeper(agent.publicKey);
 
       const taskId = freshTaskId();
       const amount = new BN(MIN_REWARD_LAMPORTS);
@@ -482,11 +501,7 @@ describe("basira", () => {
       await fund(poster);
       await fund(agent);
 
-      await program.methods
-        .registerAgent()
-        .accounts({ wallet: agent.publicKey })
-        .signers([agent])
-        .rpc();
+      await registerAgentByKeeper(agent.publicKey);
 
       const taskId = freshTaskId();
       const deadline = new BN(Math.floor(Date.now() / 1000) + 2 * HOUR);
@@ -643,11 +658,7 @@ describe("basira", () => {
       await fund(poster);
       await fund(agent);
 
-      await program.methods
-        .registerAgent()
-        .accounts({ wallet: agent.publicKey })
-        .signers([agent])
-        .rpc();
+      await registerAgentByKeeper(agent.publicKey);
 
       const taskId = freshTaskId();
       const deadline = new BN(Math.floor(Date.now() / 1000) + deadlineOffset);
@@ -672,8 +683,8 @@ describe("basira", () => {
 
       await program.methods
         .submitDeliverable()
-        .accounts({ agent: agent.publicKey, taskAccount: taskPda })
-        .signers([agent])
+        .accounts({ platformAuthority: KEEPER_KP.publicKey, taskAccount: taskPda })
+        .signers([KEEPER_KP])
         .rpc();
 
       return {
@@ -697,7 +708,7 @@ describe("basira", () => {
         assert.ok(task.assignedAgent && task.assignedAgent.equals(agent.publicKey));
       });
 
-      it("rejects submission by non-assigned agent", async () => {
+      it("rejects submission by a signer that is not the platform authority", async () => {
         const poster = Keypair.generate();
         const agent = Keypair.generate();
         const stranger = Keypair.generate();
@@ -723,12 +734,14 @@ describe("basira", () => {
         try {
           await program.methods
             .submitDeliverable()
-            .accounts({ agent: stranger.publicKey, taskAccount: taskPda })
+            .accounts({ platformAuthority: stranger.publicKey, taskAccount: taskPda })
             .signers([stranger])
             .rpc();
-          assert.fail("expected NotAssignedAgent");
+          assert.fail("expected NotPlatformAuthority");
         } catch (err) {
-          assert.match(String(err), /NotAssignedAgent/);
+          // Anchor's address constraint surfaces as ConstraintAddress, mapped
+          // back to our NotPlatformAuthority error code via the @ annotation.
+          assert.match(String(err), /NotPlatformAuthority|ConstraintAddress/);
         }
       });
     });
@@ -990,11 +1003,7 @@ describe("basira", () => {
         await fund(poster);
         await fund(agent);
 
-        await program.methods
-          .registerAgent()
-          .accounts({ wallet: agent.publicKey })
-          .signers([agent])
-          .rpc();
+        await registerAgentByKeeper(agent.publicKey);
 
         // We can't create a task with a deadline < 1h, so we use min buffer
         // and... actually we can't realistically wait an hour in CI.
@@ -1092,11 +1101,7 @@ describe("basira", () => {
       const agent = Keypair.generate();
       await fund(agent);
 
-      await program.methods
-        .registerAgent()
-        .accounts({ wallet: agent.publicKey })
-        .signers([agent])
-        .rpc();
+      await registerAgentByKeeper(agent.publicKey);
 
       const taskId = freshTaskId();
       const [taskPda] = pdaTask(program.programId, taskId);
@@ -1127,8 +1132,8 @@ describe("basira", () => {
 
       await program.methods
         .submitDeliverable()
-        .accounts({ agent: agent.publicKey, taskAccount: taskPda })
-        .signers([agent])
+        .accounts({ platformAuthority: KEEPER_KP.publicKey, taskAccount: taskPda })
+        .signers([KEEPER_KP])
         .rpc();
 
       const agentAta = getAssociatedTokenAddressSync(usdcMint, agent.publicKey);
@@ -1525,11 +1530,7 @@ describe("basira", () => {
         const agent = Keypair.generate();
         await fund(agent);
 
-        await program.methods
-          .registerAgent()
-          .accounts({ wallet: agent.publicKey })
-          .signers([agent])
-          .rpc();
+        await registerAgentByKeeper(agent.publicKey);
 
         const taskId = freshTaskId();
         const [taskPda] = pdaTask(program.programId, taskId);

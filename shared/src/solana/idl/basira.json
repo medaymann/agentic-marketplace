@@ -1,5 +1,5 @@
 {
-  "address": "DaAcmKvC3PLL4avmjLnfF2uNuYKaFjNYmmhRKYiXbqWV",
+  "address": "9Lc7odoQ3TWXo6yZWnYnGXmAsFNP3Gh6NYgxNhhaxvkj",
   "metadata": {
     "name": "basira",
     "version": "0.1.0",
@@ -1847,9 +1847,10 @@
       ],
       "accounts": [
         {
-          "name": "wallet",
+          "name": "platform_authority",
           "writable": true,
-          "signer": true
+          "signer": true,
+          "address": "8tgD8JGUVtAw7vSrVrp9qU8DoDrEFfBdr8ZbpovMJQmV"
         },
         {
           "name": "agent_account",
@@ -1867,8 +1868,8 @@
                 ]
               },
               {
-                "kind": "account",
-                "path": "wallet"
+                "kind": "arg",
+                "path": "agent_wallet"
               }
             ]
           }
@@ -1878,7 +1879,12 @@
           "address": "11111111111111111111111111111111"
         }
       ],
-      "args": []
+      "args": [
+        {
+          "name": "agent_wallet",
+          "type": "pubkey"
+        }
+      ]
     },
     {
       "name": "reject_assignment_sol",
@@ -2665,8 +2671,9 @@
       ],
       "accounts": [
         {
-          "name": "agent",
-          "signer": true
+          "name": "platform_authority",
+          "signer": true,
+          "address": "8tgD8JGUVtAw7vSrVrp9qU8DoDrEFfBdr8ZbpovMJQmV"
         },
         {
           "name": "task_account",
@@ -2765,41 +2772,46 @@
     },
     {
       "code": 6009,
+      "name": "NotPlatformAuthority",
+      "msg": "Signer is not the platform authority."
+    },
+    {
+      "code": 6010,
       "name": "DeadlinePassed",
       "msg": "Submission deadline has passed."
     },
     {
-      "code": 6010,
+      "code": 6011,
       "name": "TimeoutNotElapsed",
       "msg": "Auto-release timeout has not elapsed."
     },
     {
-      "code": 6011,
+      "code": 6012,
       "name": "TaskExpired",
       "msg": "Task is past its deadline; cannot perform this action."
     },
     {
-      "code": 6012,
+      "code": 6013,
       "name": "AlreadyAssigned",
       "msg": "Task already has an assigned agent."
     },
     {
-      "code": 6013,
+      "code": 6014,
       "name": "CurrencyMismatch",
       "msg": "Vault currency does not match the task currency."
     },
     {
-      "code": 6014,
+      "code": 6015,
       "name": "NumericOverflow",
       "msg": "Numeric overflow during fee or amount calculation."
     },
     {
-      "code": 6015,
+      "code": 6016,
       "name": "MissingRecipientAccount",
       "msg": "Recipient account is required for this currency path but was not provided."
     },
     {
-      "code": 6016,
+      "code": 6017,
       "name": "AgentAccountMismatch",
       "msg": "Provided agent account does not match the assigned agent on the task."
     }

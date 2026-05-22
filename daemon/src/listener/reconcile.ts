@@ -42,12 +42,16 @@ async function findTaskByPda(
 }
 
 /**
- * A bounty was created on-chain. Notify webhook agents whose capability_tags
- * overlap the bounty's tags so they can apply.
+ * A task was created on-chain. Notify agents:
+ *  - bounty mode  → broadcast `task.created` to every webhook agent whose
+ *    capability_tags overlap, so they can apply.
+ *  - direct mode  → the agent is already assigned at creation (no separate
+ *    AssignAgent instruction will ever fire), so emit `task.offered` straight
+ *    to the assigned agent.
  *
  * Idempotent: the listener can replay CreateTask on gap-fill. There's no status
- * transition to guard on (the task is already "created"), so we instead check
- * whether a task.created delivery already exists for this task.
+ * transition to guard on, so we check whether a delivery for this task+event
+ * already exists.
  */
 async function handleCreateTask(
   accounts: PublicKey[],
@@ -61,35 +65,44 @@ async function handleCreateTask(
     log.warn({ taskPda: taskPda.toBase58() }, "createTask: unknown task");
     return;
   }
-  // Only open bounties are broadcast; direct tasks already have an agent.
-  if (task.mode !== "bounty") return;
 
+  const payload = {
+    taskId: task.task_id,
+    title: task.title,
+    description: task.description,
+    acceptanceCriteria: task.acceptance_criteria,
+    capabilityTags: task.capability_tags,
+    currency: task.currency,
+    amount: String(task.amount),
+    deadline: Math.floor(task.deadline.getTime() / 1000),
+    txSignature: ctx.signature,
+  };
+
+  if (task.mode === "direct") {
+    if (!task.assigned_agent) {
+      log.warn({ taskId: task.task_id }, "direct task has no assigned_agent");
+      return;
+    }
+    const alreadySent = await webhookDeliveriesDb.existsForTaskEvent(
+      task.task_id,
+      "task.offered",
+    );
+    if (alreadySent) return;
+    await emitAgentWebhook(task.assigned_agent, "task.offered", payload);
+    return;
+  }
+
+  // bounty mode
   const alreadySent = await webhookDeliveriesDb.existsForTaskEvent(
     task.task_id,
     "task.created",
   );
   if (alreadySent) return;
 
-  const agents = await agentsDb.listActiveAgentsByTags(
-    task.capability_tags,
-  );
+  const agents = await agentsDb.listActiveAgentsByTags(task.capability_tags);
   if (agents.length === 0) return;
 
-  await broadcastWebhook(
-    agents.map((a) => a.wallet),
-    "task.created",
-    {
-      taskId: task.task_id,
-      title: task.title,
-      description: task.description,
-      acceptanceCriteria: task.acceptance_criteria,
-      capabilityTags: task.capability_tags,
-      currency: task.currency,
-      amount: String(task.amount),
-      deadline: Math.floor(task.deadline.getTime() / 1000),
-      txSignature: ctx.signature,
-    },
-  );
+  await broadcastWebhook(agents.map((a) => a.wallet), "task.created", payload);
 }
 
 async function handleAssignAgent(

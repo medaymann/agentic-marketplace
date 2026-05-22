@@ -2,14 +2,75 @@ import { randomUUID } from "node:crypto";
 import { randomBytes } from "node:crypto";
 import bcrypt from "bcrypt";
 import bs58 from "bs58";
+import { PublicKey } from "@solana/web3.js";
 import * as agentsDb from "../db/agents";
 import * as sessionsDb from "../db/sessions";
-import * as noncesDb from "../db/nonces";
 import { agentPreRegisterInputSchema } from "../schemas/agent";
 import { verifyEd25519Signature } from "../solana/sig";
+import { getConnection, confirmSignatureByPolling } from "../solana/connection";
+import { getProgram } from "../solana/program";
+import { agentPda } from "../solana/pdas";
+import { buildRegisterAgentTx } from "../solana/builders/index";
+import { loadPlatformAuthorityKeypair } from "../solana/keys";
 
 const BCRYPT_ROUNDS = 10;
 const REGISTRATION_SESSION_TTL_MS = 30 * 60 * 1000; // 30 minutes
+
+export interface RegisterAgentOnChainResult {
+  alreadyRegistered: boolean;
+  agentAccount: string;
+  txSignature: string | null;
+}
+
+/**
+ * Create the agent's on-chain `AgentAccount` PDA, signed and paid for by the
+ * platform authority (the keeper). Agents stay off-chain — they never sign or
+ * pay for this. Without this PDA, any instruction that touches `agent_account`
+ * (assign_agent, approve_sol, approve_usdc) fails with AccountNotInitialized.
+ *
+ * Idempotent: if the PDA already exists on-chain, returns early without sending
+ * a tx (so re-onboarding the same wallet is safe).
+ *
+ * Unlike submit_deliverable, this DOES wait for confirmation. Registration is a
+ * one-time prerequisite for assignment and payment, and there is no daemon-side
+ * retry — so the caller must know it landed. A confirmation failure throws,
+ * letting the onboarding route surface a retryable error to the user.
+ */
+export async function registerAgentOnChain(
+  agentWallet: string,
+): Promise<RegisterAgentOnChainResult> {
+  const walletPk = new PublicKey(agentWallet);
+  const [agentAccount] = agentPda(walletPk);
+  const connection = getConnection();
+
+  const existing = await connection.getAccountInfo(agentAccount);
+  if (existing) {
+    return { alreadyRegistered: true, agentAccount: agentAccount.toBase58(), txSignature: null };
+  }
+
+  const platformAuthority = loadPlatformAuthorityKeypair();
+  const program = getProgram(connection);
+  const { blockhash } = await connection.getLatestBlockhash("confirmed");
+
+  const { tx } = await buildRegisterAgentTx({
+    agentWallet: walletPk,
+    platformAuthority: platformAuthority.publicKey,
+    recentBlockhash: blockhash,
+    program,
+  });
+  tx.sign([platformAuthority]);
+
+  const txSignature = await connection.sendTransaction(tx, {
+    skipPreflight: false,
+    maxRetries: 3,
+  });
+  // Poll over HTTP RPC rather than confirmTransaction's WebSocket subscription,
+  // which throws `bufferUtil.mask is not a function` on Node builds lacking a
+  // working `bufferutil` native addon (e.g. Node 24).
+  await confirmSignatureByPolling(txSignature);
+
+  return { alreadyRegistered: false, agentAccount: agentAccount.toBase58(), txSignature };
+}
 
 export interface PreRegisterResult {
   sessionToken: string;
@@ -122,7 +183,6 @@ export interface CompleteRegistrationResult {
 
 export async function completeRegistration(input: {
   sessionToken: string;
-  signedRegisterAgentTxBase64: string;
 }): Promise<CompleteRegistrationResult> {
   const session = await sessionsDb.getSession(input.sessionToken);
   if (!session) throw new Error("Session not found or expired");

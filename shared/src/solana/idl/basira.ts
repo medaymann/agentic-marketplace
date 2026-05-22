@@ -5,7 +5,7 @@
  * IDL can be found at `target/idl/basira.json`.
  */
 export type Basira = {
-  "address": "DaAcmKvC3PLL4avmjLnfF2uNuYKaFjNYmmhRKYiXbqWV",
+  "address": "9Lc7odoQ3TWXo6yZWnYnGXmAsFNP3Gh6NYgxNhhaxvkj",
   "metadata": {
     "name": "basira",
     "version": "0.1.0",
@@ -1853,9 +1853,10 @@ export type Basira = {
       ],
       "accounts": [
         {
-          "name": "wallet",
+          "name": "platformAuthority",
           "writable": true,
-          "signer": true
+          "signer": true,
+          "address": "8tgD8JGUVtAw7vSrVrp9qU8DoDrEFfBdr8ZbpovMJQmV"
         },
         {
           "name": "agentAccount",
@@ -1873,8 +1874,8 @@ export type Basira = {
                 ]
               },
               {
-                "kind": "account",
-                "path": "wallet"
+                "kind": "arg",
+                "path": "agentWallet"
               }
             ]
           }
@@ -1884,7 +1885,12 @@ export type Basira = {
           "address": "11111111111111111111111111111111"
         }
       ],
-      "args": []
+      "args": [
+        {
+          "name": "agentWallet",
+          "type": "pubkey"
+        }
+      ]
     },
     {
       "name": "rejectAssignmentSol",
@@ -2671,8 +2677,9 @@ export type Basira = {
       ],
       "accounts": [
         {
-          "name": "agent",
-          "signer": true
+          "name": "platformAuthority",
+          "signer": true,
+          "address": "8tgD8JGUVtAw7vSrVrp9qU8DoDrEFfBdr8ZbpovMJQmV"
         },
         {
           "name": "taskAccount",
@@ -2771,41 +2778,46 @@ export type Basira = {
     },
     {
       "code": 6009,
+      "name": "notPlatformAuthority",
+      "msg": "Signer is not the platform authority."
+    },
+    {
+      "code": 6010,
       "name": "deadlinePassed",
       "msg": "Submission deadline has passed."
     },
     {
-      "code": 6010,
+      "code": 6011,
       "name": "timeoutNotElapsed",
       "msg": "Auto-release timeout has not elapsed."
     },
     {
-      "code": 6011,
+      "code": 6012,
       "name": "taskExpired",
       "msg": "Task is past its deadline; cannot perform this action."
     },
     {
-      "code": 6012,
+      "code": 6013,
       "name": "alreadyAssigned",
       "msg": "Task already has an assigned agent."
     },
     {
-      "code": 6013,
+      "code": 6014,
       "name": "currencyMismatch",
       "msg": "Vault currency does not match the task currency."
     },
     {
-      "code": 6014,
+      "code": 6015,
       "name": "numericOverflow",
       "msg": "Numeric overflow during fee or amount calculation."
     },
     {
-      "code": 6015,
+      "code": 6016,
       "name": "missingRecipientAccount",
       "msg": "Recipient account is required for this currency path but was not provided."
     },
     {
-      "code": 6016,
+      "code": 6017,
       "name": "agentAccountMismatch",
       "msg": "Provided agent account does not match the assigned agent on the task."
     }

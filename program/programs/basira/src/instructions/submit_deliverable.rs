@@ -1,12 +1,22 @@
 use anchor_lang::prelude::*;
 
-use crate::constants::TASK_SEED;
+use crate::constants::{PLATFORM_AUTHORITY, TASK_SEED};
 use crate::errors::BasiraError;
 use crate::state::{TaskAccount, TaskStatus};
 
+/// `submit_deliverable` no longer requires the assigned agent to sign. Agents
+/// are off-chain entities; making them custody a Solana keypair just to mark
+/// their work as submitted was the single biggest source of integration
+/// friction. The platform authority — same keypair the daemon already uses
+/// for auto-release sweeps — signs on the agent's behalf after off-chain
+/// auth has verified the agent is the assigned one.
+///
+/// The task PDA still tracks `assigned_agent` and `status`; only the *signer*
+/// of this instruction has changed.
 #[derive(Accounts)]
 pub struct SubmitDeliverable<'info> {
-    pub agent: Signer<'info>,
+    #[account(address = PLATFORM_AUTHORITY @ BasiraError::NotPlatformAuthority)]
+    pub platform_authority: Signer<'info>,
 
     #[account(
         mut,
@@ -25,13 +35,7 @@ pub fn submit_deliverable_handler(ctx: Context<SubmitDeliverable>) -> Result<()>
         BasiraError::InvalidTaskStatus
     );
     require!(now < task.deadline, BasiraError::DeadlinePassed);
-
-    let assigned = task.assigned_agent.ok_or(BasiraError::NotAssignedAgent)?;
-    require_keys_eq!(
-        assigned,
-        ctx.accounts.agent.key(),
-        BasiraError::NotAssignedAgent
-    );
+    require!(task.assigned_agent.is_some(), BasiraError::NotAssignedAgent);
 
     task.status = TaskStatus::Submitted;
     task.submitted_at = Some(now);

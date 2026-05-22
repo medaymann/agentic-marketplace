@@ -4,16 +4,19 @@ import type { Basira } from "../idl/basira";
 import { taskPda, taskIdFromUuid } from "../pdas";
 import { buildVersionedTx } from "./_tx";
 
+/**
+ * Build a `submit_deliverable` tx signed by the platform authority (NOT the
+ * agent). Agents stay off-chain — the platform's daemon-side keypair is the
+ * sole on-chain signer for submission marker.
+ */
 export async function buildSubmitDeliverableTx({
   taskIdUuid,
-  agent,
-  payer,
+  platformAuthority,
   recentBlockhash,
   program,
 }: {
   taskIdUuid: string;
-  agent: PublicKey;
-  payer: PublicKey;
+  platformAuthority: PublicKey;
   recentBlockhash: string;
   program: Program<Basira>;
 }): Promise<{ tx: VersionedTransaction }> {
@@ -23,8 +26,9 @@ export async function buildSubmitDeliverableTx({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const ix = await (program.methods as any)
     .submitDeliverable()
-    .accounts({ agent, taskAccount })
+    .accounts({ platformAuthority, taskAccount })
     .instruction();
 
-  return { tx: buildVersionedTx(payer, recentBlockhash, [ix]) };
+  // Platform authority pays the fee too — agents never pay tx fees.
+  return { tx: buildVersionedTx(platformAuthority, recentBlockhash, [ix]) };
 }

@@ -29,6 +29,9 @@ pub enum BasiraError {
     #[msg("Signer is not the arbitrator.")]
     NotArbitrator,
 
+    #[msg("Signer is not the platform authority.")]
+    NotPlatformAuthority,
+
     #[msg("Submission deadline has passed.")]
     DeadlinePassed,
 

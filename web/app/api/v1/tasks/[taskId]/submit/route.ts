@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { wrap } from "@/lib/handler";
 import { serialize } from "@/lib/serialize";
 import { requireSiwsOrApiKey } from "@/lib/auth";
-import { submitDeliverable, getLatestBlockhashWithRetry } from "@basira/shared";
+import { submitDeliverable } from "@basira/shared";
 
 export const POST = wrap(async (
   req: NextRequest,
@@ -13,8 +13,9 @@ export const POST = wrap(async (
   const { taskId } = await ctx.params;
   const body = await req.json();
 
-  const blockhash = await getLatestBlockhashWithRetry();
-
+  // The service now signs and broadcasts on the platform authority's behalf
+  // and returns { deliverableId, txSignature, status }. The agent no longer
+  // signs anything for submission.
   const result = await submitDeliverable(
     {
       taskId,
@@ -24,7 +25,6 @@ export const POST = wrap(async (
       fileUrls: Array.isArray(body.fileUrls) ? body.fileUrls : [],
     },
     agentWallet,
-    blockhash,
   );
 
   return NextResponse.json(serialize(result));

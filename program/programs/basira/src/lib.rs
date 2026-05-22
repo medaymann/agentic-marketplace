@@ -8,14 +8,14 @@ pub mod state;
 use instructions::*;
 use state::TaskMode;
 
-declare_id!("DaAcmKvC3PLL4avmjLnfF2uNuYKaFjNYmmhRKYiXbqWV");
+declare_id!("9Lc7odoQ3TWXo6yZWnYnGXmAsFNP3Gh6NYgxNhhaxvkj");
 
 #[program]
 pub mod basira {
     use super::*;
 
-    pub fn register_agent(ctx: Context<RegisterAgent>) -> Result<()> {
-        register_agent_handler(ctx)
+    pub fn register_agent(ctx: Context<RegisterAgent>, agent_wallet: Pubkey) -> Result<()> {
+        register_agent_handler(ctx, agent_wallet)
     }
 
     pub fn create_task_sol(
