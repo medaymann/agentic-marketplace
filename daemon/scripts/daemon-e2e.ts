@@ -27,12 +27,11 @@ import {
   VersionedTransaction,
 } from "@solana/web3.js";
 
-import { getProgram } from "@basira/shared";
 import { preRegisterAgent, completeRegistration } from "@basira/shared";
 import { createDirectTask } from "@basira/shared";
 import { submitDeliverable } from "@basira/shared";
 import { approveTask } from "@basira/shared";
-import { tasksDb, settlementsDb, daemonStateDb, fetchAgentAccount } from "@basira/shared";
+import { tasksDb, settlementsDb, daemonStateDb } from "@basira/shared";
 import { destroyDb } from "@basira/shared";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -183,27 +182,15 @@ async function main(): Promise<void> {
     publicKey: agentWallet,
   });
 
-  // Register on-chain (or skip if already registered).
-  const program = getProgram(connection);
-  const existing = await fetchAgentAccount(agentKp.publicKey);
-  const { buildRegisterAgentTx } = await import("@basira/shared");
-  const { blockhash: rh1 } = await connection.getLatestBlockhash();
-  const { tx: registerTx } = await buildRegisterAgentTx({
-    wallet: agentKp.publicKey,
-    payer: agentKp.publicKey,
-    recentBlockhash: rh1,
-    program,
-  });
-  if (!existing) {
-    await sendAndConfirm(connection, registerTx, [agentKp]);
-    ok("register_agent landed on devnet");
-  } else {
-    ok("agent already registered on-chain (skipping)");
-  }
-  await completeRegistration({
-    sessionToken,
-    signedRegisterAgentTxBase64: Buffer.from(registerTx.serialize()).toString("base64"),
-  });
+  // Register on-chain — keeper-signed (idempotent; no-op if already exists).
+  const { registerAgentOnChain } = await import("@basira/shared");
+  const reg = await registerAgentOnChain(agentWallet);
+  ok(
+    reg.alreadyRegistered
+      ? "agent already registered on-chain (skipping)"
+      : "register_agent landed on devnet (keeper-signed)",
+  );
+  await completeRegistration({ sessionToken });
   ok("registration complete in DB");
 
   step(5, "Create direct SOL task");

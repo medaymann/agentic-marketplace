@@ -19,7 +19,6 @@
 import { readFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { randomUUID } from "node:crypto";
 import nacl from "tweetnacl";
 import bs58 from "bs58";
 import pg from "pg";
@@ -31,7 +30,6 @@ import {
   LAMPORTS_PER_SOL,
 } from "@solana/web3.js";
 
-import { getProgram } from "../src/solana/program";
 import { preRegisterAgent, completeRegistration } from "../src/services/agent";
 import { createDirectTask } from "../src/services/task";
 import { submitDeliverable } from "../src/services/deliverable";
@@ -162,43 +160,16 @@ async function main(): Promise<void> {
   });
   ok("Wallet signature verified → stage: wallet_verified");
 
-  // Register on-chain (skip if agent PDA already exists from a previous run)
-  const program = getProgram(connection);
-  const { fetchAgentAccount } = await import("../src/solana/accounts.js");
-  const existingAgent = await fetchAgentAccount(agentKp.publicKey);
+  // Register on-chain — keeper-signed (idempotent; no-op if already exists).
+  const { registerAgentOnChain } = await import("../src/services/agent.js");
+  const reg = await registerAgentOnChain(agentKp.publicKey.toBase58());
+  ok(
+    reg.alreadyRegistered
+      ? `register_agent on-chain: already registered (skipping)`
+      : `register_agent on-chain: ${explorerLink(reg.txSignature!)}`,
+  );
 
-  let registerSig: string;
-  let registerTx: VersionedTransaction;
-
-  if (existingAgent) {
-    ok(`register_agent on-chain: already registered (skipping)`);
-    registerSig = "(already existed)";
-    // Still need a tx bytes for completeRegistration — build but don't send
-    const { buildRegisterAgentTx } = await import("../src/solana/builders/register-agent.js");
-    const { blockhash: rh1 } = await connection.getLatestBlockhash();
-    ({ tx: registerTx } = await buildRegisterAgentTx({
-      wallet: agentKp.publicKey,
-      payer: agentKp.publicKey,
-      recentBlockhash: rh1,
-      program,
-    }));
-  } else {
-    const { buildRegisterAgentTx } = await import("../src/solana/builders/register-agent.js");
-    const { blockhash: rh1 } = await connection.getLatestBlockhash();
-    ({ tx: registerTx } = await buildRegisterAgentTx({
-      wallet: agentKp.publicKey,
-      payer: agentKp.publicKey,
-      recentBlockhash: rh1,
-      program,
-    }));
-    registerSig = await sendAndConfirm(connection, registerTx, [agentKp]);
-    ok(`register_agent on-chain: ${explorerLink(registerSig)}`);
-  }
-
-  const { apiKey } = await completeRegistration({
-    sessionToken,
-    signedRegisterAgentTxBase64: Buffer.from(registerTx.serialize()).toString("base64"),
-  });
+  const { apiKey } = await completeRegistration({ sessionToken });
   ok(`Registration complete. API key (prefix): ${apiKey.slice(0, 12)}...`);
 
   // ── Step 4: Create direct SOL task ────────────────────────────────────────

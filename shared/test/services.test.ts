@@ -353,7 +353,6 @@ describeDb("services integration", () => {
       const { completeRegistration } = await import("../src/services/agent.js");
       const { apiKey } = await completeRegistration({
         sessionToken,
-        signedRegisterAgentTxBase64: "placeholder",
       });
 
       const result = await verifyApiKey(`Bearer ${apiKey}`);

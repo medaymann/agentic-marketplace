@@ -5,9 +5,13 @@ import pg from "pg";
 import { Keypair } from "@solana/web3.js";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import nacl from "tweetnacl";
-import bs58 from "bs58";
-import { randomBytes } from "node:crypto";
+import { createHmac } from "node:crypto";
+
+const TEST_WEBHOOK_SECRET = "test-webhook-secret-deadbeef";
+
+function hmacHex(secret: string, data: string): string {
+  return createHmac("sha256", secret).update(data).digest("hex");
+}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -16,7 +20,7 @@ beforeAll(() => {
   process.env["DATABASE_URL"] ??= "postgresql://basira:basira@localhost:5432/basira";
   process.env["SOLANA_RPC_URL"] ??= "https://api.devnet.solana.com";
   process.env["SOLANA_WS_URL"] ??= "wss://api.devnet.solana.com";
-  process.env["PROGRAM_ID"] ??= "DaAcmKvC3PLL4avmjLnfF2uNuYKaFjNYmmhRKYiXbqWV";
+  process.env["PROGRAM_ID"] ??= "9Lc7odoQ3TWXo6yZWnYnGXmAsFNP3Gh6NYgxNhhaxvkj";
   process.env["KEEPER_KEYPAIR_PATH"] ??= "../keypairs/keeper.json";
   process.env["ARBITRATOR_KEYPAIR_PATH"] ??= "../keypairs/arbitrator.json";
   process.env["LLM_PROVIDER"] ??= "mock";
@@ -47,7 +51,6 @@ async function readBody(req: IncomingMessage): Promise<string> {
 }
 
 async function startAgentServer(opts: {
-  agentKp: Keypair;
   responseStrategy: (callCount: number) => "ok" | "bad-sig" | "500";
 }): Promise<{ server: Server; port: number; calls: { count: number } }> {
   const calls = { count: 0 };
@@ -61,16 +64,17 @@ async function startAgentServer(opts: {
       res.end("nope");
       return;
     }
-    const bytes =
+    // "ok" → correct HMAC of the nonce; "bad-sig" → HMAC of the wrong input.
+    const nonceHmac =
       strategy === "ok"
-        ? nacl.sign.detached(new TextEncoder().encode(nonce), opts.agentKp.secretKey)
-        : nacl.sign.detached(new TextEncoder().encode("WRONG"), opts.agentKp.secretKey);
+        ? hmacHex(TEST_WEBHOOK_SECRET, nonce)
+        : hmacHex(TEST_WEBHOOK_SECRET, "WRONG");
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(
       JSON.stringify({
         protocol_version: "1.0",
         status: "ok",
-        signed_nonce: bs58.encode(bytes),
+        nonce_hmac: nonceHmac,
       }),
     );
   });
@@ -94,7 +98,7 @@ async function seedAgent(wallet: string, endpointUrl: string): Promise<void> {
     supportedCurrencies: ["SOL"],
     minTaskRewardUsdc: 0n,
   });
-  await agentsDb.setApiKeyHash(wallet, "hash", randomBytes(32).toString("hex"));
+  await agentsDb.setApiKeyHash(wallet, "hash", TEST_WEBHOOK_SECRET);
 }
 
 describe("health-check sweep", () => {
@@ -111,12 +115,9 @@ describe("health-check sweep", () => {
     }
   });
 
-  it("succeeds when agent returns valid signed nonce", async () => {
+  it("succeeds when agent returns valid nonce HMAC", async () => {
     const agentKp = Keypair.generate();
-    const setup = await startAgentServer({
-      agentKp,
-      responseStrategy: () => "ok",
-    });
+    const setup = await startAgentServer({ responseStrategy: () => "ok" });
     server = setup.server;
     await seedAgent(agentKp.publicKey.toBase58(), `http://127.0.0.1:${setup.port}`);
 
@@ -129,10 +130,7 @@ describe("health-check sweep", () => {
 
   it("deactivates agent after 3 consecutive failures (server returns 500)", async () => {
     const agentKp = Keypair.generate();
-    const setup = await startAgentServer({
-      agentKp,
-      responseStrategy: () => "500",
-    });
+    const setup = await startAgentServer({ responseStrategy: () => "500" });
     server = setup.server;
     const wallet = agentKp.publicKey.toBase58();
     await seedAgent(wallet, `http://127.0.0.1:${setup.port}`);
@@ -152,12 +150,9 @@ describe("health-check sweep", () => {
     expect(row?.status).toBe("inactive");
   });
 
-  it("rejects bogus signed_nonce signature", async () => {
+  it("rejects bogus nonce HMAC", async () => {
     const agentKp = Keypair.generate();
-    const setup = await startAgentServer({
-      agentKp,
-      responseStrategy: () => "bad-sig",
-    });
+    const setup = await startAgentServer({ responseStrategy: () => "bad-sig" });
     server = setup.server;
     await seedAgent(agentKp.publicKey.toBase58(), `http://127.0.0.1:${setup.port}`);
 

@@ -32,7 +32,6 @@ import { buildApproveSolTx } from "../src/solana/builders/approve";
 import { buildOpenDisputeTx } from "../src/solana/builders/open-dispute";
 import { buildCancelTaskSolTx } from "../src/solana/builders/cancel-task";
 import { buildAssignAgentTx } from "../src/solana/builders/assign-agent";
-import { BASIRA_PROGRAM_ID } from "../src/solana/program-id";
 import { TREASURY_ADDRESS } from "../src/solana/constants";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -42,7 +41,6 @@ const PROGRAM_DIR = resolve(__dirname, "..", "..", "program");
 const IDL = JSON.parse(
   readFileSync(resolve(PROGRAM_DIR, "target", "idl", "basira.json"), "utf8"),
 ) as Idl;
-const PROGRAM_ID = new PublicKey(BASIRA_PROGRAM_ID);
 
 const KEYPAIRS_DIR = resolve(__dirname, "..", "..", "keypairs");
 function loadKeypair(name: string): Keypair {
@@ -53,6 +51,7 @@ function loadKeypair(name: string): Keypair {
 }
 
 const TREASURY_KP = loadKeypair("treasury.json");
+const KEEPER_KP = loadKeypair("keeper.json");
 
 function freshUuid(): string {
   const b = randomBytes(16);
@@ -99,6 +98,22 @@ describe("solana builders (bankrun)", () => {
     }
   }
 
+  // register_agent is keeper-signed: the platform authority (KEEPER_KP) signs
+  // and pays; the agent wallet is passed as an argument and never signs.
+  async function registerAgent(agentWallet: PublicKey): Promise<PublicKey> {
+    fund(KEEPER_KP.publicKey);
+    const rh = await getRecentBlockhash();
+    const { tx, agentAccount } = await buildRegisterAgentTx({
+      agentWallet,
+      platformAuthority: KEEPER_KP.publicKey,
+      recentBlockhash: rh,
+      program,
+    });
+    tx.sign([KEEPER_KP]);
+    await sendTx(tx);
+    return agentAccount;
+  }
+
   beforeAll(async () => {
     context = await startAnchor(
       PROGRAM_DIR,
@@ -120,19 +135,10 @@ describe("solana builders (bankrun)", () => {
     program = new Program(IDL, provider) as unknown as Program<Basira>;
   }, 30_000);
 
-  it("register_agent: builds and lands correctly", async () => {
+  it("register_agent: builds and lands correctly (keeper-signed)", async () => {
     const agent = Keypair.generate();
-    fund(agent.publicKey);
 
-    const recentBlockhash = await getRecentBlockhash();
-    const { tx, agentAccount } = await buildRegisterAgentTx({
-      wallet: agent.publicKey,
-      payer: agent.publicKey,
-      recentBlockhash,
-      program,
-    });
-    tx.sign([agent]);
-    await sendTx(tx);
+    const agentAccount = await registerAgent(agent.publicKey);
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const acc = await (program.account as any)["agentAccount"].fetch(agentAccount);
@@ -145,19 +151,9 @@ describe("solana builders (bankrun)", () => {
     fund(poster.publicKey);
     fund(agent.publicKey);
     fund(TREASURY_ADDRESS);
+    fund(KEEPER_KP.publicKey);
 
-    // Register agent
-    {
-      const rh = await getRecentBlockhash();
-      const { tx } = await buildRegisterAgentTx({
-        wallet: agent.publicKey,
-        payer: agent.publicKey,
-        recentBlockhash: rh,
-        program,
-      });
-      tx.sign([agent]);
-      await sendTx(tx);
-    }
+    await registerAgent(agent.publicKey);
 
     const taskIdUuid = freshUuid();
     const now = await nowOnChain();
@@ -181,17 +177,16 @@ describe("solana builders (bankrun)", () => {
       await sendTx(tx);
     }
 
-    // Submit deliverable
+    // Submit deliverable — signed by the platform authority (keeper), not the agent.
     {
       const rh = await getRecentBlockhash();
       const { tx } = await buildSubmitDeliverableTx({
         taskIdUuid,
-        agent: agent.publicKey,
-        payer: agent.publicKey,
+        platformAuthority: KEEPER_KP.publicKey,
         recentBlockhash: rh,
         program,
       });
-      tx.sign([agent]);
+      tx.sign([KEEPER_KP]);
       await sendTx(tx);
     }
 
@@ -269,18 +264,7 @@ describe("solana builders (bankrun)", () => {
     fund(poster.publicKey);
     fund(agent.publicKey);
 
-    // Register agent
-    {
-      const rh = await getRecentBlockhash();
-      const { tx } = await buildRegisterAgentTx({
-        wallet: agent.publicKey,
-        payer: agent.publicKey,
-        recentBlockhash: rh,
-        program,
-      });
-      tx.sign([agent]);
-      await sendTx(tx);
-    }
+    await registerAgent(agent.publicKey);
 
     const taskIdUuid = freshUuid();
     const now = await nowOnChain();
@@ -331,18 +315,9 @@ describe("solana builders (bankrun)", () => {
     const agent = Keypair.generate();
     fund(poster.publicKey);
     fund(agent.publicKey);
+    fund(KEEPER_KP.publicKey);
 
-    {
-      const rh = await getRecentBlockhash();
-      const { tx } = await buildRegisterAgentTx({
-        wallet: agent.publicKey,
-        payer: agent.publicKey,
-        recentBlockhash: rh,
-        program,
-      });
-      tx.sign([agent]);
-      await sendTx(tx);
-    }
+    await registerAgent(agent.publicKey);
 
     const taskIdUuid = freshUuid();
     const now = await nowOnChain();
@@ -368,12 +343,11 @@ describe("solana builders (bankrun)", () => {
       const rh = await getRecentBlockhash();
       const { tx } = await buildSubmitDeliverableTx({
         taskIdUuid,
-        agent: agent.publicKey,
-        payer: agent.publicKey,
+        platformAuthority: KEEPER_KP.publicKey,
         recentBlockhash: rh,
         program,
       });
-      tx.sign([agent]);
+      tx.sign([KEEPER_KP]);
       await sendTx(tx);
     }
 

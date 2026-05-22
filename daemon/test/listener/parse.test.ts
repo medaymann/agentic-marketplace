@@ -6,7 +6,7 @@ beforeAll(() => {
   process.env["DATABASE_URL"] ??= "postgresql://basira:basira@localhost:5432/basira";
   process.env["SOLANA_RPC_URL"] ??= "https://api.devnet.solana.com";
   process.env["SOLANA_WS_URL"] ??= "wss://api.devnet.solana.com";
-  process.env["PROGRAM_ID"] ??= "DaAcmKvC3PLL4avmjLnfF2uNuYKaFjNYmmhRKYiXbqWV";
+  process.env["PROGRAM_ID"] ??= "9Lc7odoQ3TWXo6yZWnYnGXmAsFNP3Gh6NYgxNhhaxvkj";
   process.env["KEEPER_KEYPAIR_PATH"] ??= "../keypairs/keeper.json";
   process.env["ARBITRATOR_KEYPAIR_PATH"] ??= "../keypairs/arbitrator.json";
   process.env["LLM_PROVIDER"] ??= "mock";
@@ -14,7 +14,7 @@ beforeAll(() => {
   process.env["NODE_ENV"] = "test";
 });
 
-const PROGRAM_ID = new PublicKey("DaAcmKvC3PLL4avmjLnfF2uNuYKaFjNYmmhRKYiXbqWV");
+const PROGRAM_ID = new PublicKey("9Lc7odoQ3TWXo6yZWnYnGXmAsFNP3Gh6NYgxNhhaxvkj");
 
 function makeIx(programId: PublicKey, accounts: PublicKey[]): PartiallyDecodedInstruction {
   return { programId, accounts, data: "" };

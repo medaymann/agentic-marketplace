@@ -34,7 +34,6 @@ describe("Agent registration schemas", () => {
   it("agentRegisterCompleteInputSchema accepts valid input", () => {
     const result = agentRegisterCompleteInputSchema.safeParse({
       sessionToken: "reg_test-session-token-12345",
-      signedRegisterAgentTxBase64: "AHk0qUxzYXNzZXI+Sm9lRG9l",
     });
     expect(result.success).toBe(true);
   });

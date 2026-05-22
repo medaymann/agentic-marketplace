@@ -4,7 +4,7 @@ beforeAll(() => {
   process.env["DATABASE_URL"] ??= "postgresql://basira:basira@localhost:5432/basira";
   process.env["SOLANA_RPC_URL"] ??= "https://api.devnet.solana.com";
   process.env["SOLANA_WS_URL"] ??= "wss://api.devnet.solana.com";
-  process.env["PROGRAM_ID"] ??= "DaAcmKvC3PLL4avmjLnfF2uNuYKaFjNYmmhRKYiXbqWV";
+  process.env["PROGRAM_ID"] ??= "9Lc7odoQ3TWXo6yZWnYnGXmAsFNP3Gh6NYgxNhhaxvkj";
   process.env["KEEPER_KEYPAIR_PATH"] ??= "../keypairs/keeper.json";
   process.env["ARBITRATOR_KEYPAIR_PATH"] ??= "../keypairs/arbitrator.json";
   process.env["LLM_PROVIDER"] ??= "mock";
@@ -16,7 +16,7 @@ describe("lifecycle", () => {
   it("loads env from process.env without throwing", async () => {
     const { getEnv } = await import("../src/env.js");
     const env = getEnv();
-    expect(env.PROGRAM_ID).toBe("DaAcmKvC3PLL4avmjLnfF2uNuYKaFjNYmmhRKYiXbqWV");
+    expect(env.PROGRAM_ID).toBe("9Lc7odoQ3TWXo6yZWnYnGXmAsFNP3Gh6NYgxNhhaxvkj");
     expect(env.HEALTH_PORT).toBe(8080);
   });
 
