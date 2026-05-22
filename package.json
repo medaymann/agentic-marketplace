@@ -5,7 +5,8 @@
   "workspaces": [
     "shared",
     "web",
-    "daemon"
+    "daemon",
+    "mcp-proxy"
   ],
   "scripts": {
     "dev": "powershell -ExecutionPolicy Bypass -NoProfile -File ./scripts/dev.ps1",
@@ -15,7 +16,8 @@
     "test": "npm run test --workspaces --if-present",
     "build": "npm run build --workspaces --if-present",
     "daemon:dev": "npm run -w @basira/daemon dev",
-    "daemon:e2e": "npm run -w @basira/daemon e2e"
+    "daemon:e2e": "npm run -w @basira/daemon e2e",
+    "onboard": "tsx tools/onboard/index.ts"
   },
   "engines": {
     "node": ">=20"

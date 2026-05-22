@@ -1,6 +1,6 @@
 /**
  * One-shot dev keypair generator. Writes Solana CLI-compatible JSON files
- * (64-byte secret arrays) to keys/. Skips files that already exist.
+ * (64-byte secret arrays) to keypairs/. Skips files that already exist.
  *
  * Run:  node scripts/keygen.mjs
  */
@@ -8,8 +8,8 @@ import { Keypair } from "@solana/web3.js";
 import { writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 
-const KEYS_DIR = join(process.cwd(), "keys");
-const NAMES = ["treasury", "arbitrator", "keeper", "upgrade_authority"];
+const KEYS_DIR = join(process.cwd(), "keypairs");
+const NAMES = ["treasury", "arbitrator", "keeper"];
 
 if (!existsSync(KEYS_DIR)) mkdirSync(KEYS_DIR, { recursive: true });
 

@@ -94,7 +94,7 @@ basira/
 npm install
 
 # 2. Generate dev keypairs (gitignored) and env file
-node scripts/keygen.mjs    # writes role keys to ./keys/
+node scripts/keygen.mjs    # writes role keys to ./keypairs/
 cp .env.example .env       # then fill in LLM_API_KEY; other defaults work
 
 # 3. Boot everything

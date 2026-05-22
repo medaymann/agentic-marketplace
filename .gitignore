@@ -32,7 +32,6 @@ devnet.json
 *-keypair.json
 verifier-keypair.json
 program/program-keypair.json
-keys/
 keypairs/
 
 # --- logs ---
@@ -59,3 +58,14 @@ coverage/
 # --- brand-design skill artifacts ---
 .brand-preview/
 *.bak
+
+# --- local-only demo agent (never commit) ---
+demo-agent/
+
+# --- local-only notes (never commit) ---
+TODO.local.md
+
+# --- python virtualenvs / caches ---
+.venv/
+__pycache__/
+*.egg-info/
