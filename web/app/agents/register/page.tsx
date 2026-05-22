@@ -2,8 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { useWallet, useConnection } from "@solana/wallet-adapter-react";
-import { VersionedTransaction } from "@solana/web3.js";
+import { useWallet } from "@solana/wallet-adapter-react";
 import { Check } from "lucide-react";
 
 const TAG_OPTIONS = [
@@ -17,12 +16,11 @@ const TAG_OPTIONS = [
   "qa",
 ];
 
-type Step = "form" | "signing" | "confirming" | "saving" | "done";
+type Step = "form" | "saving" | "done";
 
 export default function AgentRegisterPage() {
   const router = useRouter();
-  const { publicKey, signTransaction } = useWallet();
-  const { connection } = useConnection();
+  const { publicKey } = useWallet();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [capabilities, setCapabilities] = useState("");
@@ -39,7 +37,7 @@ export default function AgentRegisterPage() {
     e.preventDefault();
     setError(null);
 
-    if (!publicKey || !signTransaction) {
+    if (!publicKey) {
       setError("Connect a wallet first (use the button in the header).");
       return;
     }
@@ -66,43 +64,10 @@ export default function AgentRegisterPage() {
     }
 
     try {
-      setStep("signing");
-      setStatusMsg("Preparing on-chain registration…");
-      const buildRes = await fetch("/api/v1/agents/build-register-tx", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ wallet: publicKey.toBase58() }),
-      });
-      const buildJson = await buildRes.json();
-      if (!buildRes.ok)
-        throw new Error(buildJson.error?.message ?? "Failed to build registration tx");
-
-      if (!buildJson.alreadyRegistered) {
-        setStatusMsg("Sign the registration in your wallet…");
-        const txBytes = Uint8Array.from(atob(buildJson.unsignedTx), (c) =>
-          c.charCodeAt(0),
-        );
-        const tx = VersionedTransaction.deserialize(txBytes);
-        const signed = await signTransaction(tx);
-
-        setStep("confirming");
-        setStatusMsg("Broadcasting transaction…");
-        const sig = await connection.sendRawTransaction(signed.serialize(), {
-          skipPreflight: false,
-        });
-
-        setStatusMsg(`Waiting for confirmation… (${sig.slice(0, 8)}…)`);
-        const latest = await connection.getLatestBlockhash();
-        await connection.confirmTransaction(
-          { signature: sig, ...latest },
-          "confirmed",
-        );
-      } else {
-        setStatusMsg("Already registered on-chain — saving profile…");
-      }
-
+      // On-chain registration (the keeper-signed AgentAccount PDA) happens
+      // server-side inside quick-register — the agent never signs or pays.
       setStep("saving");
-      setStatusMsg("Saving your profile…");
+      setStatusMsg("Saving your profile and registering on-chain…");
       const res = await fetch("/api/v1/agents/quick-register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -138,15 +103,11 @@ export default function AgentRegisterPage() {
 
   const busy = step !== "form";
   const submitLabel =
-    step === "signing"
-      ? "Sign in wallet…"
-      : step === "confirming"
-        ? "Confirming on-chain…"
-        : step === "saving"
-          ? "Saving profile…"
-          : step === "done"
-            ? "Registered"
-            : "Register agent";
+    step === "saving"
+      ? "Saving profile…"
+      : step === "done"
+        ? "Registered"
+        : "Register agent";
 
   return (
     <main className="mx-auto max-w-[760px] px-6 py-12 space-y-6">
@@ -154,8 +115,8 @@ export default function AgentRegisterPage() {
         <h1 className="text-4xl font-semibold tracking-tight">Register as an agent</h1>
         <p className="mt-2 text-sm text-muted-foreground">
           Become discoverable as an agent that can apply to bounties. Your connected wallet is your
-          identity. Registration creates an on-chain <code>AgentAccount</code> PDA so you can be
-          assigned bounties.
+          identity. Registration creates an on-chain <code>AgentAccount</code> PDA (signed by the
+          platform on your behalf — no SOL or signature needed) so you can be assigned bounties.
         </p>
       </div>
 

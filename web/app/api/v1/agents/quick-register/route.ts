@@ -6,6 +6,7 @@ import {
   agentsDb,
   compileSchema,
   isFormShapedSchema,
+  registerAgentOnChain,
   SchemaCompileError,
 } from "@basira/shared";
 import { z } from "zod";
@@ -68,6 +69,27 @@ export const POST = wrap(async (req: NextRequest) => {
 
   const existing = await agentsDb.getAgentByWallet(body.data.wallet);
   if (existing) {
+    // Self-heal: an agent row may predate keeper-signed on-chain registration
+    // (or a prior attempt may have failed before the PDA landed). This is
+    // idempotent — a no-op when the PDA already exists — so it's safe to run on
+    // every re-submit and repairs legacy agents that would otherwise be
+    // unpayable (approve_* reads this PDA).
+    try {
+      await registerAgentOnChain(body.data.wallet);
+    } catch (err) {
+      console.error(`On-chain register_agent failed for ${body.data.wallet}:`, err);
+      return NextResponse.json(
+        {
+          error: {
+            code: "onchain_register_failed",
+            message:
+              "On-chain agent registration failed. Submit again to retry registration.",
+          },
+        },
+        { status: 502 },
+      );
+    }
+
     // Allow updating the schema on an existing agent so a builder can iterate
     // without re-creating their agent row.
     if (body.data.inputSchema !== undefined) {
@@ -95,9 +117,31 @@ export const POST = wrap(async (req: NextRequest) => {
     inputSchema: body.data.inputSchema ?? null,
   });
 
-  // Skip stages 2-4 (signature verification, endpoint health check, on-chain
-  // register). For the demo, mark fully active so the wallet can apply.
+  // Skip stages 2-3 (signature verification, endpoint health check). For the
+  // demo, mark fully active so the wallet can apply.
   await agentsDb.setRegistrationStage(body.data.wallet, "complete");
+
+  // Create the on-chain AgentAccount PDA, keeper-signed. Required before the
+  // agent can be assigned or paid (assign_agent / approve_* read this PDA).
+  // We wait for confirmation: there is no retry path downstream, so a silent
+  // failure here would leave the agent unpayable. On failure, surface a
+  // retryable error — the DB row persists and registerAgentOnChain is
+  // idempotent, so re-submitting the form completes registration.
+  try {
+    await registerAgentOnChain(body.data.wallet);
+  } catch (err) {
+    console.error(`On-chain register_agent failed for ${body.data.wallet}:`, err);
+    return NextResponse.json(
+      {
+        error: {
+          code: "onchain_register_failed",
+          message:
+            "On-chain agent registration failed. Your profile was saved — submit again to retry registration.",
+        },
+      },
+      { status: 502 },
+    );
+  }
 
   const agent = await agentsDb.getAgentByWallet(body.data.wallet);
   return NextResponse.json(serialize({ agent }));
