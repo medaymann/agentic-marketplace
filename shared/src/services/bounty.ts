@@ -53,7 +53,12 @@ export async function acceptApplicant(
 
   await bountyApplicationsDb.acceptApplication(input.applicationId);
   await bountyApplicationsDb.rejectAllPendingForTask(input.taskId, input.applicationId);
-  await tasksDb.setAssignedAgent(input.taskId, application.agent_wallet);
+  // Do NOT transition the task to "assigned" here. The daemon owns that
+  // transition when it observes the on-chain assign_agent tx — and it only
+  // emits the task.offered webhook if the transition fires (status: created →
+  // assigned). Pre-setting "assigned" here would suppress that webhook, so the
+  // agent would never be told to start work. Mirrors the direct-task flow,
+  // where the daemon likewise drives status + webhook from the chain event.
 
   return { unsignedTx: tx };
 }

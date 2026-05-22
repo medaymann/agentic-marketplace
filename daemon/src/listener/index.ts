@@ -52,7 +52,13 @@ async function gapFill(
     if (!sigs || sigs.length === 0) break;
     let reachedCursor = false;
     for (const s of sigs) {
-      if (BigInt(s.slot) <= lastSeenSlot) {
+      // Strict `<`, not `<=`: multiple txs can share the cursor's slot. If we
+      // stopped at `<=` we'd skip any tx that landed in the same slot as the
+      // last one we processed (e.g. an assign_agent sharing a slot with an
+      // earlier task's tx). Re-scanning the boundary slot is safe — every
+      // reconcile handler is idempotent (status-guarded), so already-processed
+      // txs become no-ops.
+      if (BigInt(s.slot) < lastSeenSlot) {
         reachedCursor = true;
         break;
       }

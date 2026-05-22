@@ -97,17 +97,6 @@ export async function setSettledAt(taskId: string, at: Date): Promise<void> {
     .execute();
 }
 
-export async function setAssignedAgent(
-  taskId: string,
-  wallet: string,
-): Promise<void> {
-  await getDb()
-    .updateTable("tasks")
-    .set({ assigned_agent: wallet, status: "assigned" })
-    .where("task_id", "=", taskId)
-    .execute();
-}
-
 export interface ListBountiesFilter {
   currency?: "SOL" | "USDC";
   limit?: number;

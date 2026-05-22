@@ -6,6 +6,7 @@ import {
   deliverablesDb,
   webhookDeliveriesDb,
   recordSettlement,
+  fetchTaskAccount,
 } from "@basira/shared";
 import { TREASURY_ADDRESS } from "@basira/shared";
 import { getLogger } from "../log.js";
@@ -118,15 +119,19 @@ async function handleAssignAgent(
     log.warn({ taskPda: taskPda.toBase58() }, "assignAgent: unknown task");
     return;
   }
-  // agent_account is the agent PDA; the wallet is the assigned agent stored in DB already.
-  // We trust the service layer's DB row for the wallet; just transition status.
-  if (!task.assigned_agent) {
-    log.warn({ taskId: task.task_id }, "assignAgent: task has no assigned_agent in DB");
+  // The on-chain assign_agent tx is the source of truth for who got assigned —
+  // accept_applicant intentionally does NOT pre-write assigned_agent to the DB
+  // (that would suppress this webhook). Read the assigned wallet from chain.
+  const onChain = await fetchTaskAccount(task.task_id);
+  const assignedAgent =
+    onChain?.assignedAgent?.toBase58() ?? task.assigned_agent ?? null;
+  if (!assignedAgent) {
+    log.warn({ taskId: task.task_id }, "assignAgent: no assigned_agent on-chain or in DB");
     return;
   }
-  const fired = await tasksDb.transitionToAssigned(task.task_id, task.assigned_agent);
+  const fired = await tasksDb.transitionToAssigned(task.task_id, assignedAgent);
   if (fired) {
-    await emitAgentWebhook(task.assigned_agent, "task.offered", {
+    await emitAgentWebhook(assignedAgent, "task.offered", {
       taskId: task.task_id,
       txSignature: ctx.signature,
     });
