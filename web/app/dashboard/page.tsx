@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useWallet } from "@solana/wallet-adapter-react";
 import {
@@ -9,6 +10,11 @@ import {
   shortenWallet,
   statusBadgeColor,
 } from "@/lib/format";
+import {
+  queryKeys,
+  fetchTasksByPoster,
+  fetchTasksByAgent,
+} from "@/lib/queries";
 
 type Task = {
   task_id: string;
@@ -25,26 +31,28 @@ type Task = {
 export default function DashboardPage() {
   const { publicKey } = useWallet();
   const [wallet, setWallet] = useState("");
-  const [posted, setPosted] = useState<Task[] | null>(null);
-  const [assigned, setAssigned] = useState<Task[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
 
   const effectiveWallet = publicKey?.toBase58() ?? wallet;
+  const enabled = !!effectiveWallet;
 
-  useEffect(() => {
-    if (!effectiveWallet) return;
-    setError(null);
-    Promise.all([
-      fetch(`/api/v1/tasks?poster=${effectiveWallet}`).then((r) => r.json()),
-      fetch(`/api/v1/tasks?agent=${effectiveWallet}`).then((r) => r.json()),
-    ])
-      .then(([p, a]) => {
-        if (p.error) throw new Error(p.error.message);
-        setPosted(p.tasks);
-        setAssigned(a.tasks ?? []);
-      })
-      .catch((e) => setError(e.message));
-  }, [effectiveWallet]);
+  const postedQ = useQuery({
+    queryKey: queryKeys.tasksByPoster(effectiveWallet),
+    queryFn: () => fetchTasksByPoster<{ tasks: Task[] }>(effectiveWallet),
+    enabled,
+  });
+  const assignedQ = useQuery({
+    queryKey: queryKeys.tasksByAgent(effectiveWallet),
+    queryFn: () => fetchTasksByAgent<{ tasks: Task[] }>(effectiveWallet),
+    enabled,
+  });
+
+  const posted = postedQ.data?.tasks ?? null;
+  const assigned = assignedQ.data?.tasks ?? null;
+  const error = postedQ.error
+    ? (postedQ.error as Error).message
+    : assignedQ.error
+      ? (assignedQ.error as Error).message
+      : null;
 
   return (
     <main className="mx-auto max-w-[1100px] px-6 py-12 space-y-8">

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Outfit, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import { QueryProvider } from "@/components/basira/QueryProvider";
 import { WalletProvider } from "@/components/basira/WalletProvider";
 import { TopNav } from "@/components/basira/TopNav";
 import { AnimatedBackground } from "@/components/basira/AnimatedBackground";
@@ -24,13 +25,15 @@ export default function RootLayout({
         className="font-sans antialiased min-h-screen"
         style={{ backgroundColor: "#08080F" }}
       >
-        <WalletProvider>
-          <AnimatedBackground />
-          <div className="relative z-10 flex min-h-screen flex-col">
-            <TopNav />
-            <main className="flex-1">{children}</main>
-          </div>
-        </WalletProvider>
+        <QueryProvider>
+          <WalletProvider>
+            <AnimatedBackground />
+            <div className="relative z-10 flex min-h-screen flex-col">
+              <TopNav />
+              <main className="flex-1">{children}</main>
+            </div>
+          </WalletProvider>
+        </QueryProvider>
       </body>
     </html>
   );

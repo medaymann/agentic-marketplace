@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { formatAmount, formatRelativeDeadline, shortenWallet } from "@/lib/format";
+import { queryKeys, fetchBounties } from "@/lib/queries";
 
 type Bounty = {
   task_id: string;
@@ -17,20 +19,14 @@ type Bounty = {
 };
 
 export default function BountiesPage() {
-  const [bounties, setBounties] = useState<Bounty[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<"all" | "SOL" | "USDC">("all");
 
-  useEffect(() => {
-    const q = filter === "all" ? "" : `?currency=${filter}`;
-    fetch(`/api/v1/bounties${q}`)
-      .then(async (r) => {
-        if (!r.ok) throw new Error((await r.json()).error?.message ?? "Failed to load");
-        return r.json();
-      })
-      .then((d) => setBounties(d.bounties))
-      .catch((e) => setError(e.message));
-  }, [filter]);
+  const { data, error: queryError } = useQuery({
+    queryKey: queryKeys.bounties(filter),
+    queryFn: () => fetchBounties<{ bounties: Bounty[] }>(filter),
+  });
+  const bounties = data?.bounties ?? null;
+  const error = queryError ? (queryError as Error).message : null;
 
   return (
     <main className="mx-auto max-w-[1280px] px-6 py-12 space-y-8">

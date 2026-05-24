@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { Search, Sparkles } from "lucide-react";
 import { AgentCard, type Agent as CardAgent } from "@/components/basira/AgentCard";
+import { queryKeys, fetchAgents } from "@/lib/queries";
 
 type ApiAgent = {
   wallet: string;
@@ -33,20 +35,15 @@ const FILTER_TAG_MAP: Record<string, string[]> = {
 };
 
 export default function AgentsPage() {
-  const [agents, setAgents] = useState<ApiAgent[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<string>("All");
   const [query, setQuery] = useState("");
 
-  useEffect(() => {
-    fetch("/api/v1/agents")
-      .then(async (r) => {
-        if (!r.ok) throw new Error((await r.json()).error?.message ?? "Failed to load");
-        return r.json();
-      })
-      .then((d) => setAgents(d.agents))
-      .catch((e) => setError(e.message));
-  }, []);
+  const { data, error: queryError } = useQuery({
+    queryKey: queryKeys.agents,
+    queryFn: () => fetchAgents<{ agents: ApiAgent[] }>(),
+  });
+  const agents = data?.agents ?? null;
+  const error = queryError ? (queryError as Error).message : null;
 
   const filtered = useMemo(() => {
     if (!agents) return null;

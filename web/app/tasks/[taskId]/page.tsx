@@ -1,10 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useState, use } from "react";
+import { useCallback, useState, use } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { ArrowLeft } from "lucide-react";
 import { useTxSubmit } from "@/lib/useTxSubmit";
+import { queryKeys, fetchTaskDetail, tasksRoot } from "@/lib/queries";
 import {
   formatAmount,
   formatBytes,
@@ -84,8 +86,7 @@ type TaskDetail = {
 export default function TaskDetailPage({ params }: { params: Promise<{ taskId: string }> }) {
   const { taskId } = use(params);
   const { publicKey } = useWallet();
-  const [data, setData] = useState<TaskDetail | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionBusy, setActionBusy] = useState(false);
   const [actionStatus, setActionStatus] = useState<string | null>(null);
@@ -93,21 +94,23 @@ export default function TaskDetailPage({ params }: { params: Promise<{ taskId: s
 
   const wallet = publicKey?.toBase58() ?? null;
 
-  const refresh = useCallback(async () => {
-    try {
-      const r = await fetch(`/api/v1/tasks/${taskId}`, { cache: "no-store" });
-      if (!r.ok) throw new Error((await r.json()).error?.message ?? "Failed to load");
-      setData(await r.json());
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    }
-  }, [taskId]);
+  // Live poll every 4s while the tab is visible (refetchIntervalInBackground:
+  // false pauses it on hidden tabs).
+  const { data, error: queryError } = useQuery({
+    queryKey: queryKeys.taskDetail(taskId),
+    queryFn: () => fetchTaskDetail<TaskDetail>(taskId),
+    refetchInterval: 4000,
+    refetchIntervalInBackground: false,
+  });
+  const error = queryError ? (queryError as Error).message : null;
 
-  useEffect(() => {
-    refresh();
-    const id = setInterval(refresh, 4000);
-    return () => clearInterval(id);
-  }, [refresh]);
+  // After a mutation, refresh this task and any task/bounty lists that may now
+  // be stale (dashboard, bounties) so the user never needs a manual reload.
+  const refresh = useCallback(async () => {
+    await queryClient.invalidateQueries({ queryKey: queryKeys.taskDetail(taskId) });
+    await queryClient.invalidateQueries({ queryKey: tasksRoot });
+    await queryClient.invalidateQueries({ queryKey: ["bounties"] });
+  }, [queryClient, taskId]);
 
   if (error) {
     return (
