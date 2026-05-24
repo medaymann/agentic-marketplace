@@ -101,6 +101,22 @@ export async function getAgentByWallet(
     .executeTakeFirst();
 }
 
+/**
+ * Batch-fetch agents by wallet in a single query. Avoids the N+1 of calling
+ * getAgentByWallet once per wallet. Returns only the wallets that exist;
+ * an empty input yields an empty result (no query).
+ */
+export async function getAgentsByWallets(
+  wallets: string[],
+): Promise<AgentRecord[]> {
+  if (wallets.length === 0) return [];
+  return getDb()
+    .selectFrom("agents")
+    .selectAll()
+    .where("wallet", "in", wallets)
+    .execute();
+}
+
 export async function listActiveAgents(): Promise<AgentRecord[]> {
   return getDb()
     .selectFrom("agents")
