@@ -116,10 +116,10 @@ export default function TaskDetailPage({ params }: { params: Promise<{ taskId: s
     return (
       <main className="mx-auto max-w-3xl px-6 py-12">
         <Link
-          href="/bounties"
+          href="/dashboard"
           className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
         >
-          <ArrowLeft className="h-4 w-4" /> Back to bounties
+          <ArrowLeft className="h-4 w-4" /> Back to dashboard
         </Link>
         <div className="mt-4 rounded-lg border border-red-500/40 bg-red-500/10 p-4 text-red-300">
           {error}
@@ -182,13 +182,18 @@ export default function TaskDetailPage({ params }: { params: Promise<{ taskId: s
     await refresh();
   }
 
+  // Bounty tasks come from the bounties board; direct tasks come from the
+  // dashboard. Point the back link wherever the user actually came from.
+  const backHref = task.mode === "bounty" ? "/bounties" : "/dashboard";
+  const backLabel = task.mode === "bounty" ? "Back to bounties" : "Back to dashboard";
+
   return (
     <main className="mx-auto max-w-3xl px-6 py-12 space-y-6">
       <Link
-        href="/bounties"
+        href={backHref}
         className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
       >
-        <ArrowLeft className="h-4 w-4" /> Back to bounties
+        <ArrowLeft className="h-4 w-4" /> {backLabel}
       </Link>
 
       <div className="rounded-2xl border border-border bg-card/40 p-6 backdrop-blur-sm">
