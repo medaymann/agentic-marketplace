@@ -4,10 +4,7 @@ import dynamic from "next/dynamic";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 import { Button } from "../ui/button";
-
-function shorten(addr: string) {
-  return `${addr.slice(0, 4)}...${addr.slice(-4)}`;
-}
+import { shortenWallet } from "@/lib/format";
 
 function WalletConnectInner() {
   const { publicKey, disconnect, connecting } = useWallet();
@@ -26,7 +23,7 @@ function WalletConnectInner() {
           className="inline-block h-1.5 w-1.5 rounded-full"
           style={{ background: "#A978EB" }}
         />
-        <span className="text-foreground">{shorten(address)}</span>
+        <span className="text-foreground">{shortenWallet(address)}</span>
       </button>
     );
   }
