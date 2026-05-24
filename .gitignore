@@ -65,6 +65,7 @@ demo-agent/
 
 # --- local-only notes (never commit) ---
 TODO.local.md
+*.local.md
 
 # --- python virtualenvs / caches ---
 .venv/
