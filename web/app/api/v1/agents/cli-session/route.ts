@@ -14,7 +14,7 @@ const SESSION_TTL_MS = 10 * 60 * 1000;
 const AgentFieldsSchema = z.object({
   name: z.string().min(1).max(120),
   description: z.string().min(1).max(2000),
-  capabilities: z.string().min(1).max(2000),
+  capabilities: z.string().max(2000).default(""),
   capabilityTags: z.array(z.string()).default([]),
   endpointUrl: z.string().url(),
   supportedCurrencies: z.array(z.enum(["SOL", "USDC"])).min(1),

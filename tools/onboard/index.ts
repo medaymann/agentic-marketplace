@@ -2,29 +2,250 @@
 /**
  * basira-onboard
  *
- * Walks an agent builder through registration:
- *   1. Prompts for agent metadata in the terminal.
- *   2. Opens the Basira `/agents/onboard` page in a browser.
- *   3. User connects Phantom (or any wallet adapter) and signs one message.
- *   4. The page POSTs the issued API key to a one-shot localhost listener.
- *   5. CLI prints the API key and exits.
+ * Registers an agent: collects metadata in the terminal, opens the Basira
+ * onboarding page so the wallet signs once, then receives the issued API key on
+ * a one-shot localhost listener and writes it to a .env the SDK auto-loads.
  *
  * No private key ever touches this script — the wallet signs in the browser.
+ *
+ * UI: one cohesive violet flow built on @clack/core prompt engines with our own
+ * render functions (clack handles input reliably; we own every pixel of color),
+ * so the whole experience reads as a single brand-violet form on a left rail.
  */
-import { createInterface } from "node:readline/promises";
 import { createServer } from "node:http";
 import { spawn } from "node:child_process";
 import { platform } from "node:os";
 import { stdin, stdout } from "node:process";
 import { existsSync, writeFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { resolve, basename } from "node:path";
+import {
+  TextPrompt,
+  SelectPrompt,
+  MultiSelectPrompt,
+  isCancel,
+} from "@clack/core";
 
 const BASIRA_URL = process.env["BASIRA_URL"] ?? "http://localhost:3000";
 
+// ─── Theme ──────────────────────────────────────────────────────────────────
+
+const useColor = stdout.isTTY && !process.env["NO_COLOR"];
+const paint = (code: string) => (s: string) => (useColor ? `\x1b[${code}m${s}\x1b[0m` : s);
+const c = {
+  bold: paint("1"),
+  dim: paint("2"),
+  violet: paint("38;5;141"),
+  violetDim: paint("38;5;97"),
+  white: paint("97"),
+  red: paint("31"),
+};
+
+// Rail + step glyphs. The vertical bar runs down the left of every step so the
+// flow reads as one connected form.
+const S = {
+  top: "◆",
+  bar: "│",
+  active: "◆",
+  step: "◇",
+  end: "└",
+  radioOn: "●",
+  radioOff: "○",
+  checkOn: "◼",
+  checkOff: "◻",
+  pointer: "▸",
+};
+
+const bar = () => c.violetDim(S.bar);
+
+// Block-letter wordmark shown at the top of onboarding. Outlined/hollow box
+// style (ANSI-Shadow-like) to match a bold terminal banner.
+const BANNER = String.raw`
+██████╗  █████╗ ███████╗██╗██████╗  █████╗
+██╔══██╗██╔══██╗██╔════╝██║██╔══██╗██╔══██╗
+██████╔╝███████║███████╗██║██████╔╝███████║
+██╔══██╗██╔══██║╚════██║██║██╔══██╗██╔══██║
+██████╔╝██║  ██║███████║██║██║  ██║██║  ██║
+╚═════╝ ╚═╝  ╚═╝╚══════╝╚═╝╚═╝  ╚═╝╚═╝  ╚═╝`;
+
+/** Solid violet background "chip" for titles (like a highlighted rectangle). */
+const chip = (s: string) =>
+  useColor ? `\x1b[48;5;99m\x1b[97m\x1b[1m ${s} \x1b[0m` : `[ ${s} ]`;
+
+/** Opening banner: ASCII art, tagline under it, then the chip line where the
+ * rail begins. Indented to align with the prompt label text (column 3). */
+function intro(subtitle: string) {
+  const pad = "   "; // align with label text after "◆  "
+  const rows = BANNER.replace(/^\n/, "").split("\n");
+
+  // Vertical violet gradient (bright top → deeper bottom), truecolor.
+  const top = [196, 152, 255];
+  const bot = [124, 58, 237];
+  const render = (line: string, i: number) => {
+    if (!useColor) return pad + line;
+    const t = rows.length > 1 ? i / (rows.length - 1) : 0;
+    const r = Math.round(top[0]! + (bot[0]! - top[0]!) * t);
+    const g = Math.round(top[1]! + (bot[1]! - top[1]!) * t);
+    const b = Math.round(top[2]! + (bot[2]! - top[2]!) * t);
+    return `${pad}\x1b[1m\x1b[38;2;${r};${g};${b}m${line}\x1b[0m`;
+  };
+
+  stdout.write("\n");
+  stdout.write(rows.map(render).join("\n") + "\n");
+  stdout.write(`${pad}${c.dim(subtitle)}\n`);
+  stdout.write("\n");
+  stdout.write(`${pad}${chip("Agent onboarding")}\n`);
+  stdout.write(`${bar()}\n`);
+}
+
+/** A standalone note block on the rail (used for hints + the review summary). */
+function note(title: string, lines: string[]) {
+  stdout.write(`${c.violet(S.step)}  ${c.bold(title)}\n`);
+  for (const line of lines) stdout.write(`${bar()}  ${line}\n`);
+  stdout.write(`${bar()}\n`);
+}
+
+/** Closing block; success summary with the rail ending. */
+function outro(lines: string[]) {
+  for (const line of lines) stdout.write(`${bar()}  ${line}\n`);
+  stdout.write(`${c.violet(S.end)}\n\n`);
+}
+
+// ─── Prompts (clack engine, violet render) ───────────────────────────────────
+
+function fmtStepTitle(message: string, state: string) {
+  const sym =
+    state === "submit" ? c.violet(S.step)
+    : state === "cancel" ? c.red(S.step)
+    : c.violet(S.active);
+  return `${sym}  ${c.bold(message)}`;
+}
+
+interface Option<T> { value: T; label: string }
+
+/** Free-text prompt. `optional` adds a skip hint; empty submit returns "". */
+async function text(
+  message: string,
+  opts: { hint?: string; optional?: boolean; validate?: (v: string) => string | undefined } = {},
+): Promise<string> {
+  if (!stdin.isTTY) return "";
+  const prompt = new TextPrompt({
+    validate: opts.validate
+      ? (v) => opts.validate!((v ?? "").trim())
+      : opts.optional
+        ? undefined
+        : (v) => ((v ?? "").trim() ? undefined : "Required."),
+    render() {
+      const title = fmtStepTitle(message, this.state);
+      const hint = opts.hint ? `  ${c.dim(opts.hint)}` : "";
+      if (this.state === "submit") {
+        return `${title}\n${bar()}  ${c.dim((this.value ?? "").trim() || "—")}`;
+      }
+      if (this.state === "error") {
+        return `${title}${hint}\n${bar()}  ${this.userInputWithCursor}\n${c.red(S.end)}  ${c.red(this.error)}`;
+      }
+      return `${title}${hint}\n${bar()}  ${this.userInputWithCursor}\n${c.violetDim(S.end)}`;
+    },
+  });
+  const result = await prompt.prompt();
+  if (isCancel(result)) cancel();
+  return (result as string).trim();
+}
+
+/** Single-select with the radio rail in violet. */
+async function select<T>(message: string, options: Option<T>[]): Promise<T> {
+  if (!stdin.isTTY) return options[0]!.value;
+  const prompt = new SelectPrompt<{ value: T; label: string }>({
+    options,
+    initialValue: options[0]!.value,
+    render() {
+      const title = fmtStepTitle(message, this.state);
+      if (this.state === "submit" || this.state === "cancel") {
+        return `${title}\n${bar()}  ${c.dim(options[this.cursor]!.label)}`;
+      }
+      const rows = options
+        .map((o, i) => {
+          const on = i === this.cursor;
+          const mark = on ? c.violet(S.radioOn) : c.dim(S.radioOff);
+          const label = on ? c.white(o.label) : c.dim(o.label);
+          return `${bar()}  ${mark} ${label}`;
+        })
+        .join("\n");
+      return `${title}\n${rows}\n${c.violetDim(S.end)}`;
+    },
+  });
+  const result = await prompt.prompt();
+  if (isCancel(result)) cancel();
+  return result as T;
+}
+
+/** Multi-select checklist with the checkbox rail in violet. */
+async function multiselect(
+  message: string,
+  options: Option<string>[],
+  hint: string,
+): Promise<string[]> {
+  if (!stdin.isTTY) return [];
+  const prompt = new MultiSelectPrompt<{ value: string; label: string }>({
+    options,
+    initialValues: [],
+    required: false,
+    render() {
+      const selected = (this.value ?? []) as string[];
+      const title = `${fmtStepTitle(message, this.state)}  ${c.dim(hint)}`;
+      if (this.state === "submit" || this.state === "cancel") {
+        const chosen = options.filter((o) => selected.includes(o.value)).map((o) => o.label);
+        return `${title}\n${bar()}  ${c.dim(chosen.join(", ") || "none")}`;
+      }
+      const rows = options
+        .map((o, i) => {
+          const on = i === this.cursor;
+          const checked = selected.includes(o.value);
+          const box = checked ? c.violet(S.checkOn) : c.dim(S.checkOff);
+          const pointer = on ? c.violet(S.pointer) : " ";
+          const label = on ? c.white(o.label) : checked ? o.label : c.dim(o.label);
+          return `${bar()}  ${pointer} ${box} ${label}`;
+        })
+        .join("\n");
+      return `${title}\n${rows}\n${c.violetDim(S.end)}`;
+    },
+  });
+  const result = await prompt.prompt();
+  if (isCancel(result)) cancel();
+  return result as string[];
+}
+
+/** Spinner on the rail; returns stop(). */
+function spinner(label: string): () => void {
+  if (!useColor) {
+    stdout.write(`${bar()}  ${label}\n`);
+    return () => {};
+  }
+  const frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+  let i = 0;
+  const draw = () => stdout.write(`\r${bar()}  ${c.violet(frames[i++ % frames.length]!)} ${label}`);
+  draw();
+  const id = setInterval(draw, 80);
+  return () => {
+    clearInterval(id);
+    stdout.write("\r\x1b[2K");
+  };
+}
+
+function cancel(): never {
+  stdout.write(`${c.red(S.end)}  ${c.red("Cancelled.")}\n\n`);
+  process.exit(1);
+}
+
+function fatal(msg: string): never {
+  stdout.write(`${c.red(S.end)}  ${c.red(msg)}\n\n`);
+  process.exit(1);
+}
+
+// ─── Credentials persistence ─────────────────────────────────────────────────
+
 /**
- * Write credentials to a .env the agent SDK can auto-load. Overwrite-safe:
- * if .env already exists we won't clobber it — we write .env.basira instead
- * and report which file we used. Returns the path written.
+ * Write credentials to a .env the SDK auto-loads. Overwrite-safe: if .env
+ * exists we write .env.basira instead. Returns the path written.
  */
 function writeEnvFile(payload: KeyPayload): string {
   const entries = [
@@ -32,55 +253,86 @@ function writeEnvFile(payload: KeyPayload): string {
     ...(payload.webhookSecret ? [`BASIRA_WEBHOOK_SECRET=${payload.webhookSecret}`] : []),
     `BASIRA_URL=${BASIRA_URL}`,
   ];
-  const lines = entries.join("\n") + "\n";
-
   const primary = resolve(process.cwd(), ".env");
-  const target = existsSync(primary)
-    ? resolve(process.cwd(), ".env.basira")
-    : primary;
-  writeFileSync(target, lines, { encoding: "utf8", mode: 0o600 });
+  const target = existsSync(primary) ? resolve(process.cwd(), ".env.basira") : primary;
+  writeFileSync(target, entries.join("\n") + "\n", { encoding: "utf8", mode: 0o600 });
   return target;
 }
 
+/** Prepend https:// when the user types a bare host (no scheme). */
+function normalizeUrl(input: string): string {
+  const v = input.trim();
+  if (!v) return v;
+  return /^https?:\/\//i.test(v) ? v : `https://${v}`;
+}
+
+// ─── Flow ────────────────────────────────────────────────────────────────────
+
+const PRESET_TAGS = [
+  "research", "code", "data", "writing", "design",
+  "translation", "summarization", "audit", "ocr", "marketing",
+];
+const CUSTOM_TAG = "__custom__";
+
 async function main() {
-  const rl = createInterface({ input: stdin, output: stdout });
-  const ask = async (prompt: string, fallback?: string) => {
-    const raw = (await rl.question(`${prompt}${fallback ? ` [${fallback}]` : ""}: `)).trim();
-    return raw || fallback || "";
-  };
+  intro("Register your agent and start earning");
 
-  console.log("\n  basira-onboard — register your agent on Basira\n");
+  const name = await text("Agent name", { hint: "e.g. CSV Cleaner" });
+  const description = await text("Short description", {
+    hint: "one line on what it is",
+  });
+  const capabilities = await text("Capabilities", {
+    hint: "optional · what it does, inputs/outputs, limits — Enter to skip",
+    optional: true,
+  });
 
-  const name = await ask("Agent name");
-  if (!name) fatal("name is required");
-
-  const description = await ask("Short description");
-  if (!description) fatal("description is required");
-
-  const capabilities = await ask("Capabilities (free text)", description);
-
-  const tagsRaw = await ask("Tags (comma-separated, e.g. research,summarization)");
-  const capabilityTags = tagsRaw.split(",").map((t) => t.trim()).filter(Boolean);
-
-  const endpointUrl = await ask("Endpoint URL (where webhooks are POSTed)");
-  if (!endpointUrl || !/^https?:\/\//.test(endpointUrl)) {
-    fatal("endpointUrl must be a valid http(s) URL");
+  const picked = await multiselect(
+    "Capability tags",
+    [
+      ...PRESET_TAGS.map((t) => ({ value: t, label: t })),
+      { value: CUSTOM_TAG, label: "＋ add custom…" },
+    ],
+    "space to toggle · enter to confirm",
+  );
+  const capabilityTags = picked.filter((t) => t !== CUSTOM_TAG);
+  if (picked.includes(CUSTOM_TAG)) {
+    const extra = await text("Custom tags", { hint: "comma-separated", optional: true });
+    for (const t of extra.split(",").map((x) => x.trim().toLowerCase()).filter(Boolean)) {
+      if (!capabilityTags.includes(t)) capabilityTags.push(t);
+    }
   }
 
-  const currRaw = await ask("Supported currencies (SOL, USDC, or both)", "SOL");
-  const supportedCurrencies = currRaw
-    .split(",")
-    .map((c) => c.trim().toUpperCase())
-    .filter((c) => c === "SOL" || c === "USDC");
-  if (supportedCurrencies.length === 0) fatal("at least one currency required");
+  const endpointRaw = await text("Endpoint URL", {
+    hint: "where webhooks are POSTed — public (use a tunnel for local)",
+    validate: (v) => {
+      const url = normalizeUrl(v);
+      return /^https?:\/\/[^\s.]+\.[^\s]+/.test(url) ? undefined : "Enter a valid domain or URL.";
+    },
+  });
+  // Default the scheme to https:// so users can type just the host.
+  const endpointUrl = normalizeUrl(endpointRaw);
 
-  rl.close();
+  const supportedCurrencies = await select<("SOL" | "USDC")[]>(
+    "Which currencies will you accept?",
+    [
+      { value: ["SOL"], label: "SOL" },
+      { value: ["USDC"], label: "USDC" },
+      { value: ["SOL", "USDC"], label: "Both" },
+    ],
+  );
 
-  // Start the one-shot listener.
+  // Review before signing.
+  note("Review", [
+    `${c.dim("Name")}        ${name}`,
+    `${c.dim("Description")} ${description}`,
+    `${c.dim("Capabilities")} ${capabilities || c.dim("—")}`,
+    `${c.dim("Tags")}        ${capabilityTags.join(", ") || c.dim("none")}`,
+    `${c.dim("Endpoint")}    ${endpointUrl}`,
+    `${c.dim("Currencies")}  ${supportedCurrencies.join(", ")}`,
+  ]);
+
+  // One-shot listener + onboarding session.
   const { url: cbUrl, waitForKey } = await startCallbackListener();
-  console.log(`\n  Local callback ready at ${cbUrl}`);
-
-  // Create the onboarding session on the server.
   const sessionRes = await fetch(`${BASIRA_URL}/api/v1/agents/cli-session`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -98,54 +350,53 @@ async function main() {
   });
   if (!sessionRes.ok) {
     const err = await sessionRes.json().catch(() => ({}));
-    fatal(`session creation failed: ${JSON.stringify(err)}`);
+    fatal(`Couldn't start onboarding session: ${JSON.stringify(err)}`);
   }
   const { sessionId } = (await sessionRes.json()) as { sessionId: string };
 
   const browserUrl = `${BASIRA_URL}/agents/onboard?session=${encodeURIComponent(sessionId)}&cb=${encodeURIComponent(cbUrl)}`;
-  console.log(`  Opening browser: ${browserUrl}\n  Waiting for you to sign in your wallet…\n`);
+  note("Sign in your wallet", [
+    "A browser tab is opening — connect your wallet and approve the signature.",
+  ]);
   openBrowser(browserUrl);
 
-  const payload = await waitForKey(sessionId);
-
-  console.log("\n  ✓ Registered.\n");
-  console.log(`    Wallet:          ${payload.wallet}`);
-  console.log(`    API key:         ${payload.apiKey}`);
-  if (payload.webhookSecret) {
-    console.log(`    Webhook secret:  ${payload.webhookSecret}`);
+  const stop = spinner("Waiting for the wallet signature…");
+  let payload: KeyPayload;
+  try {
+    payload = await waitForKey(sessionId);
+  } finally {
+    stop();
   }
 
-  // Persist to a .env the SDK auto-loads, so there's no manual export step.
-  let envPath: string | null = null;
+  let envPath: string | null;
   try {
     envPath = writeEnvFile(payload);
-  } catch (e) {
-    console.log(
-      `\n  (Could not write a .env file: ${e instanceof Error ? e.message : String(e)})`,
-    );
+  } catch {
+    envPath = null;
   }
 
+  const lines = [
+    `${c.violet("✓")} ${c.bold("Agent registered.")}`,
+    "",
+    `${c.dim("Wallet")}   ${payload.wallet}`,
+    `${c.dim("API key")}  ${c.bold(payload.apiKey)}`,
+    ...(payload.webhookSecret ? [`${c.dim("Secret")}   ${c.bold(payload.webhookSecret)}`] : []),
+    "",
+  ];
   if (envPath) {
-    console.log(`\n  Credentials saved to ${envPath}`);
-    console.log("  The agent SDK loads this automatically — no export needed.");
-    console.log("  This file holds secrets: keep it out of version control.");
+    lines.push(`${c.violet("✓")} Saved to ${c.bold(basename(envPath))} — the SDK loads it automatically.`);
+    lines.push(c.dim("  Holds secrets; keep it out of version control."));
+  } else {
+    lines.push(c.dim("Set these yourself (shown once):"));
+    lines.push(`  export BASIRA_API_KEY='${payload.apiKey}'`);
+    if (payload.webhookSecret) lines.push(`  export BASIRA_WEBHOOK_SECRET='${payload.webhookSecret}'`);
   }
-
-  console.log("\n  These values are shown once. If you'd rather set them by hand:");
-  console.log("");
-  console.log("    export BASIRA_API_KEY='" + payload.apiKey + "'");
-  if (payload.webhookSecret) {
-    console.log("    export BASIRA_WEBHOOK_SECRET='" + payload.webhookSecret + "'");
-  }
-  console.log("");
-  console.log("  Next: see " + BASIRA_URL + "/skill.md for the agent loop spec");
-  console.log("  (webhook payload shapes, HMAC verification, MCP tools).\n");
+  lines.push("");
+  lines.push(`${c.dim("Next:")} ${BASIRA_URL}/skill.md ${c.dim("— the agent loop spec.")}`);
+  outro(lines);
 }
 
-function fatal(msg: string): never {
-  console.error(`\n  Error: ${msg}\n`);
-  process.exit(1);
-}
+// ─── Callback listener + browser ─────────────────────────────────────────────
 
 interface KeyPayload {
   sessionId: string;
@@ -158,7 +409,7 @@ function startCallbackListener(): Promise<{
   url: string;
   waitForKey: (sessionId: string) => Promise<KeyPayload>;
 }> {
-  return new Promise((resolve) => {
+  return new Promise((resolveListener) => {
     let resolveKey: ((p: KeyPayload) => void) | null = null;
     let expectedSessionId = "";
     const keyPromise = new Promise<KeyPayload>((res) => {
@@ -166,7 +417,6 @@ function startCallbackListener(): Promise<{
     });
 
     const server = createServer((req, res) => {
-      // CORS preflight from the browser.
       res.setHeader("Access-Control-Allow-Origin", "*");
       res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
       res.setHeader("Access-Control-Allow-Headers", "Content-Type");
@@ -181,7 +431,7 @@ function startCallbackListener(): Promise<{
         return;
       }
       const chunks: Buffer[] = [];
-      req.on("data", (c) => chunks.push(Buffer.from(c)));
+      req.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
       req.on("end", () => {
         try {
           const body = JSON.parse(Buffer.concat(chunks).toString("utf-8")) as KeyPayload;
@@ -193,7 +443,6 @@ function startCallbackListener(): Promise<{
           res.writeHead(200, { "Content-Type": "application/json" });
           res.end(JSON.stringify({ ok: true }));
           resolveKey?.(body);
-          // Close after the next tick so the response flushes.
           setImmediate(() => server.close());
         } catch (err) {
           res.writeHead(400);
@@ -205,9 +454,8 @@ function startCallbackListener(): Promise<{
     server.listen(0, "127.0.0.1", () => {
       const addr = server.address();
       if (!addr || typeof addr === "string") throw new Error("bad listener");
-      const url = `http://127.0.0.1:${addr.port}`;
-      resolve({
-        url,
+      resolveListener({
+        url: `http://127.0.0.1:${addr.port}`,
         waitForKey: (sid) => {
           expectedSessionId = sid;
           return keyPromise;
@@ -219,11 +467,7 @@ function startCallbackListener(): Promise<{
 
 function openBrowser(url: string): void {
   const cmd =
-    platform() === "darwin"
-      ? "open"
-      : platform() === "win32"
-        ? "cmd"
-        : "xdg-open";
+    platform() === "darwin" ? "open" : platform() === "win32" ? "cmd" : "xdg-open";
   const args = platform() === "win32" ? ["/c", "start", "", url] : [url];
   spawn(cmd, args, { detached: true, stdio: "ignore" }).unref();
 }
