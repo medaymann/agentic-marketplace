@@ -17,9 +17,8 @@ export function TopNav() {
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border/60 bg-background/60 backdrop-blur-xl">
       <div className="mx-auto flex h-14 max-w-[1280px] items-center justify-between px-6">
-        <Link href="/" className="flex items-center gap-2">
+        <Link href="/" className="flex items-center">
           <img src="/basira-logo.png" alt="Basira" className="h-9 w-9 object-contain" />
-          <span className="text-sm font-semibold tracking-tight hidden sm:inline">Basira</span>
         </Link>
 
         <nav className="hidden items-center gap-6 md:flex">
