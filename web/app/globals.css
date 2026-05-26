@@ -177,73 +177,250 @@
 /* ── Animated background ────────────────────────────────────────────── */
 @keyframes blob-drift-1 {
   0%, 100% { transform: translate(0, 0) scale(1); }
-  20%      { transform: translate(90px, -70px) scale(1.12); }
-  50%      { transform: translate(-50px, 100px) scale(0.88); }
-  75%      { transform: translate(70px, 50px) scale(1.06); }
+  40%      { transform: translate(60px, -50px) scale(1.08); }
+  70%      { transform: translate(-30px, 70px) scale(0.94); }
 }
 @keyframes blob-drift-2 {
   0%, 100% { transform: translate(0, 0) scale(1); }
-  30%      { transform: translate(-80px, 60px) scale(1.1); }
-  60%      { transform: translate(60px, -80px) scale(0.9); }
-  85%      { transform: translate(-30px, 30px) scale(1.04); }
+  35%      { transform: translate(-50px, 40px) scale(1.06); }
+  65%      { transform: translate(40px, -60px) scale(0.92); }
 }
-@keyframes blob-drift-3 {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  35%      { transform: translate(50px, 80px) scale(1.08); }
-  70%      { transform: translate(-70px, -50px) scale(0.92); }
+@keyframes scanline-sweep {
+  0%   { transform: translateY(-160px); }
+  100% { transform: translateY(100vh); }
 }
-@keyframes blob-drift-4 {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  40%      { transform: translate(-60px, -90px) scale(1.14); }
-  75%      { transform: translate(80px, 40px) scale(0.86); }
+
+/* ── How it works ───────────────────────────────────────────────────── */
+@keyframes hiw-pulse-ring {
+  0%   { transform: scale(1);    opacity: 0.6; }
+  100% { transform: scale(1.55); opacity: 0; }
 }
-@keyframes grid-pulse {
-  0%, 100% { opacity: 0.4; }
-  50%      { opacity: 0.7; }
+.hiw-pulse {
+  border: 1px solid;
+  animation: hiw-pulse-ring 2s var(--ease-out-expo) infinite;
+  pointer-events: none;
+}
+
+@keyframes hiw-dot-travel {
+  0%   { left: -8px;    opacity: 0; }
+  8%   { opacity: 1; }
+  92%  { opacity: 1; }
+  100% { left: calc(100% + 8px); opacity: 0; }
+}
+.hiw-dot {
+  position: absolute;
+  top: 50%;
+  left: -8px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  transform: translateY(-50%);
+  box-shadow: 0 0 6px 2px currentColor;
+  animation: hiw-dot-travel 3.3s linear infinite;
+}
+
+/* ── Background specks ──────────────────────────────────────────────── */
+@keyframes speck-a {
+  0%   { transform: translate(0px,    0px);   opacity: 0; }
+  6%   { opacity: 1; }
+  94%  { opacity: 1; }
+  100% { transform: translate(90px, -160px);  opacity: 0; }
+}
+@keyframes speck-b {
+  0%   { transform: translate(0px,   0px);    opacity: 0; }
+  6%   { opacity: 1; }
+  94%  { opacity: 1; }
+  100% { transform: translate(-75px, -200px); opacity: 0; }
+}
+@keyframes speck-c {
+  0%   { transform: translate(0px,   0px);    opacity: 0; }
+  6%   { opacity: 1; }
+  94%  { opacity: 1; }
+  100% { transform: translate(120px, -130px); opacity: 0; }
+}
+@keyframes speck-d {
+  0%   { transform: translate(0px,   0px);    opacity: 0; }
+  6%   { opacity: 1; }
+  94%  { opacity: 1; }
+  100% { transform: translate(-100px, -180px); opacity: 0; }
+}
+@keyframes speck-e {
+  0%   { transform: translate(0px,   0px);    opacity: 0; }
+  6%   { opacity: 1; }
+  94%  { opacity: 1; }
+  100% { transform: translate(50px,  -220px); opacity: 0; }
+}
+@keyframes speck-f {
+  0%   { transform: translate(0px,   0px);    opacity: 0; }
+  6%   { opacity: 1; }
+  94%  { opacity: 1; }
+  100% { transform: translate(-130px, -150px); opacity: 0; }
+}
+@keyframes speck-g {
+  0%   { transform: translate(0px,   0px);    opacity: 0; }
+  6%   { opacity: 1; }
+  94%  { opacity: 1; }
+  100% { transform: translate(100px, -190px); opacity: 0; }
+}
+@keyframes speck-h {
+  0%   { transform: translate(0px,   0px);    opacity: 0; }
+  6%   { opacity: 1; }
+  94%  { opacity: 1; }
+  100% { transform: translate(-80px, -210px); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [style*="speck-"] { animation: none !important; opacity: 0.3 !important; }
 }
 
 .bg-blob {
   position: absolute;
   border-radius: 50%;
-  filter: blur(72px);
+  filter: blur(100px);
 }
 .bg-blob-1 {
-  width: 680px; height: 680px;
+  width: 600px; height: 600px;
   background: radial-gradient(circle at center, rgba(169, 120, 235, 0.28) 0%, transparent 70%);
-  top: -220px; left: -140px;
-  animation: blob-drift-1 28s ease-in-out infinite;
+  top: -160px; left: -80px;
+  animation: blob-drift-1 40s ease-in-out infinite;
 }
 .bg-blob-2 {
-  width: 540px; height: 540px;
-  background: radial-gradient(circle at center, rgba(218, 91, 203, 0.22) 0%, transparent 70%);
-  top: 10%; right: -120px;
-  animation: blob-drift-2 34s ease-in-out infinite;
+  width: 480px; height: 480px;
+  background: radial-gradient(circle at center, rgba(218, 91, 203, 0.20) 0%, transparent 70%);
+  top: 20%; right: -60px;
+  animation: blob-drift-2 50s ease-in-out infinite;
 }
-.bg-blob-3 {
-  width: 500px; height: 500px;
-  background: radial-gradient(circle at center, rgba(120, 90, 235, 0.2) 0%, transparent 70%);
-  bottom: 5%; left: 20%;
-  animation: blob-drift-3 30s ease-in-out infinite;
-}
-.bg-blob-4 {
-  width: 420px; height: 420px;
-  background: radial-gradient(circle at center, rgba(218, 91, 203, 0.18) 0%, transparent 70%);
-  bottom: 20%; right: 15%;
-  animation: blob-drift-4 38s ease-in-out infinite;
-}
-.bg-grid {
+/* scanline: a single translucent bar that drifts top→bottom */
+.bg-scanline {
   position: absolute;
-  inset: 0;
-  background-image:
-    linear-gradient(rgba(169, 120, 235, 0.045) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(169, 120, 235, 0.045) 1px, transparent 1px);
-  background-size: 64px 64px;
-  animation: grid-pulse 8s ease-in-out infinite;
+  inset-x: 0;
+  top: 0;
+  height: 160px;
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    rgba(169, 120, 235, 0.08) 30%,
+    rgba(169, 120, 235, 0.18) 50%,
+    rgba(169, 120, 235, 0.08) 70%,
+    transparent 100%
+  );
+  animation: scanline-sweep 10s linear infinite;
+  will-change: transform;
 }
 .bg-vignette {
   position: absolute;
   inset: 0;
-  background: radial-gradient(ellipse at center, transparent 40%, rgba(8, 8, 15, 0.75) 100%);
+  background: radial-gradient(ellipse at 50% 25%, transparent 30%, rgba(8, 8, 15, 0.85) 100%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bg-blob-1, .bg-blob-2, .bg-scanline { animation: none; }
+}
+
+/* ── Landing entrance ───────────────────────────────────────────────── */
+/* Easing tokens */
+:root {
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+@keyframes hero-rise {
+  from { opacity: 0; transform: translateY(18px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes hero-rise-right {
+  from { opacity: 0; transform: translateX(24px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes hiw-rise {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* hero copy — staggered line-by-line */
+.hero-label {
+  animation: hero-rise 0.5s var(--ease-out-expo) 0.05s both;
+}
+.hero-line-1 {
+  animation: hero-rise 0.55s var(--ease-out-expo) 0.15s both;
+}
+.hero-line-2 {
+  animation: hero-rise 0.55s var(--ease-out-expo) 0.27s both;
+}
+.hero-line-3 {
+  animation: hero-rise 0.55s var(--ease-out-expo) 0.39s both;
+}
+.hero-body {
+  animation: hero-rise 0.5s var(--ease-out-expo) 0.52s both;
+}
+.hero-card-1 {
+  animation: hero-rise 0.5s var(--ease-out-expo) 0.62s both;
+}
+.hero-card-2 {
+  animation: hero-rise 0.5s var(--ease-out-expo) 0.72s both;
+}
+.hero-footnote {
+  animation: hero-rise 0.4s var(--ease-out-expo) 0.82s both;
+}
+/* feed panel enters from the right */
+.hero-feed {
+  animation: hero-rise-right 0.65s var(--ease-out-expo) 0.35s both;
+}
+
+/* how-it-works — scroll triggered via data-visible */
+.hiw-title[data-visible="true"] {
+  animation: hiw-rise 0.5s var(--ease-out-expo) 0ms both;
+}
+.hiw-step[data-visible="true"] {
+  animation: hiw-rise 0.5s var(--ease-out-expo) var(--step-delay, 0ms) both;
+}
+
+/* hero cursor blink — appears after violet line lands, blinks out */
+@keyframes hero-cursor-blink {
+  0%, 100% { opacity: 0; }
+  40%, 60% { opacity: 1; }
+}
+@keyframes hero-cursor-appear {
+  0%   { opacity: 0; }
+  100% { opacity: 1; }
+}
+.hero-cursor::after {
+  content: "|";
+  display: inline-block;
+  margin-left: 3px;
+  color: #A978EB;
+  font-weight: 300;
+  animation:
+    hero-cursor-appear 0.01s 0.94s both,
+    hero-cursor-blink 0.7s 0.94s ease-in-out 4 forwards;
+}
+
+/* primary CTA hover glow */
+.cta-primary:hover {
+  box-shadow: 0 0 0 3px rgba(169,120,235,0.2), 0 4px 20px rgba(169,120,235,0.3);
+  transform: translateY(-1px);
+}
+
+/* feed new-row slide-in */
+@keyframes feed-slide-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.feed-row:first-child {
+  animation: feed-slide-in 0.28s var(--ease-out-quart) both;
+}
+
+/* reduced motion: disable all landing animations */
+@media (prefers-reduced-motion: reduce) {
+  .hero-label, .hero-line-1, .hero-line-2, .hero-line-3,
+  .hero-body, .hero-card-1, .hero-card-2, .hero-footnote,
+  .hero-feed, .hiw-step, .hiw-title, .feed-row:first-child {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+  .hero-cursor::after { display: none; }
+  .cta-primary:hover { transform: none; }
 }
 
 /* ── Landing hero animations ────────────────────────────────────────── */
@@ -316,4 +493,154 @@
   .animate-success-pop,
   .animate-success-ring,
   .animate-success-rise { animation: none; opacity: 1; transform: none; }
+}
+
+/* ── Escrow journey ─────────────────────────────────────────────────── */
+
+/* The horizontal track fill grows to the active stage. Width is set inline
+   per-stage; this just eases the change. */
+.journey-fill {
+  transition: width 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* A node lights up when reached. */
+@keyframes node-activate {
+  0%   { transform: scale(0.6); opacity: 0; }
+  60%  { transform: scale(1.15); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+.journey-node-active { animation: node-activate 0.45s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+/* Vault breathing glow while funds are held. */
+@keyframes vault-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(169,120,235,0.0), 0 0 24px 2px rgba(169,120,235,0.18); }
+  50%      { box-shadow: 0 0 0 0 rgba(169,120,235,0.0), 0 0 38px 6px rgba(169,120,235,0.34); }
+}
+.vault-glow { animation: vault-glow 3.2s ease-in-out infinite; }
+
+/* Vault lid latches shut once funded. */
+@keyframes vault-latch {
+  0%   { transform: translateY(-4px) scaleY(0.92); opacity: 0.4; }
+  100% { transform: translateY(0) scaleY(1); opacity: 1; }
+}
+.vault-latch { animation: vault-latch 0.5s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+/* A coin falls from above into the vault (fund moment). */
+@keyframes coin-drop-in {
+  0%   { transform: translateY(-56px) scale(1); opacity: 0; }
+  20%  { opacity: 1; }
+  70%  { transform: translateY(2px) scale(1); opacity: 1; }
+  85%  { transform: translateY(-3px) scale(0.98); }
+  100% { transform: translateY(0) scale(0.6); opacity: 0; }
+}
+.coin-drop-in { animation: coin-drop-in 0.9s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+/* A coin flies out of the vault toward the agent (payout moment). */
+@keyframes coin-fly-out {
+  0%   { transform: translate(0, 0) scale(0.6); opacity: 0; }
+  25%  { transform: translate(0, -6px) scale(1); opacity: 1; }
+  100% { transform: translate(72px, -26px) scale(0.7); opacity: 0; }
+}
+.coin-fly-out { animation: coin-fly-out 0.85s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+/* Ambient idle coin shimmer inside the vault while waiting. */
+@keyframes coin-shimmer {
+  0%, 100% { opacity: 0.5; transform: translateY(0); }
+  50%      { opacity: 0.9; transform: translateY(-1.5px); }
+}
+.coin-shimmer { animation: coin-shimmer 2.4s ease-in-out infinite; }
+
+/* Deliverable document slides in. */
+@keyframes doc-arrive {
+  0%   { transform: translateY(8px) rotate(-4deg); opacity: 0; }
+  100% { transform: translateY(0) rotate(0); opacity: 1; }
+}
+.doc-arrive { animation: doc-arrive 0.5s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+/* Verdict stamp reveal. */
+@keyframes verdict-stamp {
+  0%   { transform: scale(1.6) rotate(-8deg); opacity: 0; }
+  55%  { transform: scale(0.92) rotate(2deg); opacity: 1; }
+  100% { transform: scale(1) rotate(0); opacity: 1; }
+}
+.verdict-stamp { animation: verdict-stamp 0.5s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+/* Waiting pulse for the active (not-yet-complete) stage. */
+@keyframes waiting-pulse {
+  0%, 100% { opacity: 0.4; }
+  50%      { opacity: 1; }
+}
+.waiting-pulse { animation: waiting-pulse 1.8s ease-in-out infinite; }
+
+/* ── Verdict hero ───────────────────────────────────────────────────── */
+
+/* The medallion pops in with a slight overshoot. */
+@keyframes verdict-pop {
+  0%   { transform: scale(0.4); opacity: 0; }
+  55%  { transform: scale(1.12); opacity: 1; }
+  80%  { transform: scale(0.97); }
+  100% { transform: scale(1); opacity: 1; }
+}
+.verdict-pop { animation: verdict-pop 0.6s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+/* Expanding shockwave ring behind the medallion on reveal. */
+@keyframes verdict-ring {
+  0%   { transform: scale(0.6); opacity: 0.65; }
+  100% { transform: scale(2.1); opacity: 0; }
+}
+.verdict-ring { animation: verdict-ring 1.1s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+
+/* The confidence arc sweeps from empty to its value. The component sets the
+   target via the --conf custom property (stroke-dashoffset). */
+@keyframes conf-sweep {
+  from { stroke-dashoffset: var(--conf-start); }
+  to   { stroke-dashoffset: var(--conf-end); }
+}
+.conf-arc { animation: conf-sweep 1s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+/* Confidence number counts up feel via a quick fade/rise. */
+@keyframes conf-rise {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.conf-rise { animation: conf-rise 0.6s 0.25s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+/* Reasoning + criteria stagger in under the medallion. */
+@keyframes verdict-line-rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.verdict-line-rise { animation: verdict-line-rise 0.5s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+/* Soft idle breathing glow on a passing medallion. */
+@keyframes verdict-breathe-pass {
+  0%, 100% { box-shadow: 0 0 24px 2px rgba(52,211,153,0.18); }
+  50%      { box-shadow: 0 0 40px 8px rgba(52,211,153,0.32); }
+}
+.verdict-breathe-pass { animation: verdict-breathe-pass 3.4s ease-in-out infinite; }
+
+@keyframes verdict-breathe-fail {
+  0%, 100% { box-shadow: 0 0 24px 2px rgba(248,113,113,0.16); }
+  50%      { box-shadow: 0 0 38px 7px rgba(248,113,113,0.28); }
+}
+.verdict-breathe-fail { animation: verdict-breathe-fail 3.4s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .journey-fill { transition: none; }
+  .journey-node-active,
+  .vault-glow,
+  .vault-latch,
+  .coin-drop-in,
+  .coin-fly-out,
+  .coin-shimmer,
+  .doc-arrive,
+  .verdict-stamp,
+  .waiting-pulse,
+  .verdict-pop,
+  .verdict-ring,
+  .conf-arc,
+  .conf-rise,
+  .verdict-line-rise,
+  .verdict-breathe-pass,
+  .verdict-breathe-fail { animation: none; opacity: 1; transform: none; }
 }
