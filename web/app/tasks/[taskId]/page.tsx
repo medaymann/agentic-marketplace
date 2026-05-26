@@ -1,11 +1,14 @@
 "use client";
 
-import { useCallback, useState, use } from "react";
+import { Suspense, useCallback, useState, use } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useWallet } from "@solana/wallet-adapter-react";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Check, X, Scale } from "lucide-react";
 import { useTxSubmit } from "@/lib/useTxSubmit";
+import { EscrowJourney } from "@/components/basira/EscrowJourney";
+import { Collapsible } from "@/components/basira/Collapsible";
 import { queryKeys, fetchTaskDetail, tasksRoot } from "@/lib/queries";
 import {
   formatAmount,
@@ -83,9 +86,28 @@ type TaskDetail = {
   }>;
 };
 
+type Deliverable = NonNullable<TaskDetail["deliverable"]>;
+type Verdict = TaskDetail["verdict"];
+
 export default function TaskDetailPage({ params }: { params: Promise<{ taskId: string }> }) {
+  return (
+    <Suspense
+      fallback={
+        <main className="mx-auto max-w-3xl px-6 py-12">
+          <p className="text-sm text-muted-foreground">Loading…</p>
+        </main>
+      }
+    >
+      <TaskDetailInner params={params} />
+    </Suspense>
+  );
+}
+
+function TaskDetailInner({ params }: { params: Promise<{ taskId: string }> }) {
   const { taskId } = use(params);
   const { publicKey } = useWallet();
+  const searchParams = useSearchParams();
+  const justFunded = searchParams?.get("funded") === "1";
   const queryClient = useQueryClient();
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionBusy, setActionBusy] = useState(false);
@@ -140,6 +162,22 @@ export default function TaskDetailPage({ params }: { params: Promise<{ taskId: s
 
   const isPoster = wallet === task.poster_wallet;
   const isAssignedAgent = wallet !== null && wallet === task.assigned_agent;
+
+  // What stage is the user really at? The page renders ONE primary panel for
+  // the current stage; everything else demotes to collapsibles below, so the
+  // user always sees what matters now instead of a growing stack.
+  const settled = task.status === "settled";
+  const hasDeliverable = Boolean(deliverable);
+  // "review" merges delivery + the auto-run judge verdict into one decision
+  // surface. Before anything is delivered we're "waiting"; after settlement,
+  // "settled".
+  const stage: "waiting" | "review" | "settled" = settled
+    ? "settled"
+    : hasDeliverable
+      ? "review"
+      : "waiting";
+  // The brief is the focus only while waiting; once work arrives it's reference.
+  const briefOpen = stage === "waiting";
 
   async function withAction(fn: () => Promise<void>) {
     setActionError(null);
@@ -196,6 +234,15 @@ export default function TaskDetailPage({ params }: { params: Promise<{ taskId: s
         <ArrowLeft className="h-4 w-4" /> {backLabel}
       </Link>
 
+      <EscrowJourney
+        status={task.status}
+        currency={task.currency}
+        amount={task.amount}
+        verdict={verdict?.verdict ?? null}
+        hasDeliverable={Boolean(deliverable)}
+        justFunded={justFunded}
+      />
+
       <div className="rounded-2xl border border-border bg-card/40 p-6 backdrop-blur-sm">
         <div className="flex items-start justify-between flex-wrap gap-3">
           <div className="min-w-0 flex-1">
@@ -243,42 +290,31 @@ export default function TaskDetailPage({ params }: { params: Promise<{ taskId: s
         </div>
       </div>
 
-      {task.typed_inputs && Object.keys(task.typed_inputs).length > 0 && (
-        <Section title="Agent inputs">
-          <dl className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
-            {Object.entries(task.typed_inputs).map(([k, v]) => {
-              const desc =
-                task.input_schema_snapshot?.properties?.[k]?.description ?? null;
-              return (
-                <div
-                  key={k}
-                  className="rounded-md border border-border/60 bg-card/40 p-3"
-                >
-                  <dt className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
-                    {k}
-                    {desc ? <span className="ml-2 normal-case text-[10px] text-muted-foreground/70">{desc}</span> : null}
-                  </dt>
-                  <dd className="mt-1 break-all font-mono text-sm text-foreground/90">
-                    {v === null || v === undefined
-                      ? "—"
-                      : typeof v === "object"
-                        ? JSON.stringify(v)
-                        : String(v)}
-                  </dd>
-                </div>
-              );
-            })}
-          </dl>
-        </Section>
+      {/* ── Primary stage panel ─────────────────────────────────────── */}
+      {stage === "review" && deliverable && (
+        <ReviewPanel
+          deliverable={deliverable}
+          verdict={verdict}
+          taskId={task.task_id}
+        />
       )}
 
-      <Section title="Acceptance criteria">
-        <ol className="list-decimal list-inside space-y-2 text-sm text-foreground/90">
-          {task.acceptance_criteria.map((c, i) => (
-            <li key={i}>{c}</li>
-          ))}
-        </ol>
-      </Section>
+      {stage === "settled" && (
+        <div className="rounded-2xl border border-emerald-400/30 bg-emerald-400/[0.06] p-6">
+          <div className="flex items-center gap-3">
+            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-400/15 text-emerald-400">
+              <Check className="h-5 w-5" />
+            </span>
+            <div>
+              <p className="text-lg font-semibold text-foreground">Task settled</p>
+              <p className="text-sm text-muted-foreground">
+                {formatAmount(task.amount, task.currency)} released from escrow to
+                the agent.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       <ActionPanel
         wallet={wallet}
@@ -332,6 +368,57 @@ export default function TaskDetailPage({ params }: { params: Promise<{ taskId: s
           })
         }
       />
+
+      <Collapsible title="The brief" defaultOpen={briefOpen}>
+        <div className="space-y-5">
+          <div>
+            <p className="mb-2 font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
+              Acceptance criteria
+            </p>
+            <ol className="list-decimal list-inside space-y-2 text-sm text-foreground/90">
+              {task.acceptance_criteria.map((c, i) => (
+                <li key={i}>{c}</li>
+              ))}
+            </ol>
+          </div>
+
+          {task.typed_inputs && Object.keys(task.typed_inputs).length > 0 && (
+            <div>
+              <p className="mb-2 font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
+                Agent inputs
+              </p>
+              <dl className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
+                {Object.entries(task.typed_inputs).map(([k, v]) => {
+                  const desc =
+                    task.input_schema_snapshot?.properties?.[k]?.description ?? null;
+                  return (
+                    <div
+                      key={k}
+                      className="rounded-md border border-border/60 bg-card/40 p-3"
+                    >
+                      <dt className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
+                        {k}
+                        {desc ? (
+                          <span className="ml-2 normal-case text-[10px] text-muted-foreground/70">
+                            {desc}
+                          </span>
+                        ) : null}
+                      </dt>
+                      <dd className="mt-1 break-all font-mono text-sm text-foreground/90">
+                        {v === null || v === undefined
+                          ? "—"
+                          : typeof v === "object"
+                            ? JSON.stringify(v)
+                            : String(v)}
+                      </dd>
+                    </div>
+                  );
+                })}
+              </dl>
+            </div>
+          )}
+        </div>
+      </Collapsible>
 
       {task.mode === "bounty" && applications.length > 0 && (
         <Section title={`Applications (${applications.length})`}>
@@ -391,128 +478,16 @@ export default function TaskDetailPage({ params }: { params: Promise<{ taskId: s
         </Section>
       )}
 
-      {deliverable && (
-        <Section title="Deliverable">
-          {deliverable.content_text && (
-            <div className="space-y-2">
-              <span className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
-                Write-up
-              </span>
-              <pre className="max-h-64 overflow-auto whitespace-pre-wrap rounded-md border border-border bg-card/60 p-3 text-sm text-foreground/90">
-                {deliverable.content_text}
-              </pre>
-            </div>
-          )}
-          {deliverable.files && deliverable.files.length > 0 && (
-            <div className="mt-3 space-y-2">
-              <span className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
-                Files ({deliverable.files.length})
-              </span>
-              <div className="overflow-hidden rounded-md border border-border">
-                <table className="w-full text-sm">
-                  <thead className="bg-card/60 text-left font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-                    <tr>
-                      <th className="px-3 py-2">Name</th>
-                      <th className="px-3 py-2">Size</th>
-                      <th className="px-3 py-2">sha256</th>
-                      <th className="px-3 py-2"></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {deliverable.files.map((f) => (
-                      <tr key={f.key} className="border-t border-border/60">
-                        <td className="px-3 py-2 font-mono text-xs">{f.name}</td>
-                        <td className="px-3 py-2 font-mono text-xs text-muted-foreground">
-                          {formatBytes(f.sizeBytes)}
-                        </td>
-                        <td className="px-3 py-2 font-mono text-[10px] text-muted-foreground">
-                          {f.sha256.slice(0, 12)}…
-                        </td>
-                        <td className="px-3 py-2 text-right">
-                          <button
-                            type="button"
-                            onClick={async () => {
-                              const res = await fetch(
-                                `/api/v1/tasks/${task.task_id}/deliverable/download-url`,
-                                {
-                                  method: "POST",
-                                  headers: { "Content-Type": "application/json" },
-                                  credentials: "include",
-                                  body: JSON.stringify({ key: f.key }),
-                                },
-                              );
-                              const json = await res.json();
-                              if (!res.ok) {
-                                alert(json.error?.message ?? "Download failed");
-                                return;
-                              }
-                              window.open(json.url, "_blank", "noopener,noreferrer");
-                            }}
-                            className="rounded-md border border-border bg-card/60 px-3 py-1 text-xs font-medium transition-colors hover:border-foreground/30"
-                          >
-                            Download
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-          {deliverable.external_links && deliverable.external_links.length > 0 && (
-            <div className="mt-3 space-y-2">
-              <span className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
-                External links
-              </span>
-              <ul className="space-y-1 text-sm">
-                {deliverable.external_links.map((l) => (
-                  <li key={l.url}>
-                    <a
-                      href={l.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-transparent bg-clip-text bg-gradient-to-r from-[#A978EB] to-[#DA5BCB] hover:underline"
-                    >
-                      {l.label ? `${l.label} — ${l.url}` : l.url}
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-          {deliverable.submitted_at && (
-            <p className="mt-3 font-mono text-[11px] text-muted-foreground">
-              Submitted {formatDate(deliverable.submitted_at)}
-            </p>
-          )}
-        </Section>
-      )}
-
-      {verdict && (
-        <Section title="AI judge verdict">
-          <div className="mb-2 flex items-center gap-2">
-            <span
-              className={`px-3 py-1 rounded text-sm font-semibold uppercase ${
-                verdict.verdict === "pass"
-                  ? "bg-emerald-500/20 text-emerald-300"
-                  : verdict.verdict === "fail"
-                  ? "bg-red-500/20 text-red-300"
-                  : "bg-gray-500/20 text-gray-300"
-              }`}
-            >
-              {verdict.verdict}
-            </span>
-            {verdict.confidence && (
-              <span className="font-mono text-xs text-muted-foreground">
-                confidence {(Number(verdict.confidence) * 100).toFixed(0)}%
-              </span>
-            )}
-          </div>
-          {verdict.reasoning && (
-            <p className="whitespace-pre-wrap text-sm text-foreground/90">{verdict.reasoning}</p>
-          )}
-        </Section>
+      {/* After settlement, the review (deliverable + verdict) folds into a
+          history collapsible instead of staying the primary panel. */}
+      {stage === "settled" && deliverable && (
+        <Collapsible title="Deliverable & verdict" defaultOpen={false}>
+          <ReviewBody
+            deliverable={deliverable}
+            verdict={verdict}
+            taskId={task.task_id}
+          />
+        </Collapsible>
       )}
 
       {dispute && (
@@ -535,7 +510,7 @@ export default function TaskDetailPage({ params }: { params: Promise<{ taskId: s
       )}
 
       {settlements && settlements.length > 0 && (
-        <Section title="On-chain settlements">
+        <Collapsible title="On-chain settlements" defaultOpen={settled}>
           <div className="space-y-3">
             {settlements.map((s) => (
               <div
@@ -568,7 +543,7 @@ export default function TaskDetailPage({ params }: { params: Promise<{ taskId: s
               </div>
             ))}
           </div>
-        </Section>
+        </Collapsible>
       )}
     </main>
   );
@@ -610,6 +585,289 @@ function parseExternalLinks(text: string): Array<{ url: string; label?: string }
       const label = line.slice(pipe + 1).trim();
       return label ? { url, label } : { url };
     });
+}
+
+// The primary panel during the Review stage: the deliverable is the focus,
+// with the auto-run judge verdict shown as a banner on top.
+// The verdict centerpiece: an animated medallion with a confidence gauge, the
+// PASS/FAIL word at scale, and the judge's reasoning. Replaces the old
+// text-in-a-box treatment.
+function VerdictHero({ verdict }: { verdict: NonNullable<Verdict> }) {
+  const v = verdict.verdict;
+  const pass = v === "pass";
+  const fail = v === "fail";
+  const conf =
+    verdict.confidence != null ? Math.round(Number(verdict.confidence) * 100) : null;
+
+  const accent = pass ? "#34D399" : fail ? "#F87171" : "#9aa";
+  const tintBg = pass
+    ? "bg-emerald-400/[0.05] border-emerald-400/25"
+    : fail
+      ? "bg-red-500/[0.05] border-red-500/25"
+      : "border-border bg-card/40";
+
+  // Arc geometry for the confidence gauge.
+  const R = 34;
+  const C = 2 * Math.PI * R;
+  const target = conf != null ? C * (1 - conf / 100) : C;
+
+  return (
+    <div className={`overflow-hidden rounded-xl border ${tintBg}`}>
+      <div className="flex flex-col items-center gap-4 px-6 py-7 sm:flex-row sm:items-center sm:gap-6 sm:py-6">
+        {/* Medallion + confidence gauge */}
+        <div className="relative flex h-24 w-24 shrink-0 items-center justify-center">
+          {/* shockwave */}
+          <span
+            className="verdict-ring absolute h-16 w-16 rounded-full"
+            style={{ background: accent, opacity: 0.5 }}
+          />
+          {/* confidence arc */}
+          <svg className="absolute inset-0 -rotate-90" viewBox="0 0 80 80">
+            <circle
+              cx="40"
+              cy="40"
+              r={R}
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="4"
+              className="text-border"
+            />
+            {conf != null && (
+              <circle
+                cx="40"
+                cy="40"
+                r={R}
+                fill="none"
+                stroke={accent}
+                strokeWidth="4"
+                strokeLinecap="round"
+                className="conf-arc"
+                style={
+                  {
+                    strokeDasharray: C,
+                    strokeDashoffset: target,
+                    ["--conf-start" as string]: `${C}`,
+                    ["--conf-end" as string]: `${target}`,
+                  } as React.CSSProperties
+                }
+              />
+            )}
+          </svg>
+          {/* center icon */}
+          <span
+            className={`verdict-pop flex h-14 w-14 items-center justify-center rounded-full ${
+              pass
+                ? "bg-emerald-400/15 verdict-breathe-pass"
+                : fail
+                  ? "bg-red-500/15 verdict-breathe-fail"
+                  : "bg-card"
+            }`}
+          >
+            {pass ? (
+              <Check className="h-7 w-7 text-emerald-400" strokeWidth={2.5} />
+            ) : fail ? (
+              <X className="h-7 w-7 text-red-400" strokeWidth={2.5} />
+            ) : (
+              <Scale className="h-6 w-6 text-muted-foreground" />
+            )}
+          </span>
+        </div>
+
+        {/* Verdict word + confidence label */}
+        <div className="min-w-0 text-center sm:text-left">
+          <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+            AI judge
+          </p>
+          <p
+            className="verdict-pop mt-1 text-3xl font-semibold tracking-tight"
+            style={{ color: accent }}
+          >
+            {pass ? "Passed" : fail ? "Failed" : "Unavailable"}
+          </p>
+          {conf != null && (
+            <p className="conf-rise mt-1 font-mono text-xs text-muted-foreground">
+              <span className="tabular-nums text-foreground">{conf}%</span>{" "}
+              confidence
+            </p>
+          )}
+        </div>
+      </div>
+
+      {/* Reasoning */}
+      {verdict.reasoning && (
+        <div className="verdict-line-rise border-t border-border/60 px-6 py-4">
+          <p className="mb-1.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+            Reasoning
+          </p>
+          <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground/90">
+            {verdict.reasoning}
+          </p>
+        </div>
+      )}
+
+      {/* Failed criteria */}
+      {verdict.failed_criteria && verdict.failed_criteria.length > 0 && (
+        <div className="verdict-line-rise border-t border-border/60 px-6 py-4">
+          <p className="mb-2 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+            Unmet criteria ({verdict.failed_criteria.length})
+          </p>
+          <ul className="space-y-1.5">
+            {verdict.failed_criteria.map((c, i) => (
+              <li key={i} className="flex items-start gap-2 text-sm text-red-300">
+                <X className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                <span>{c}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ReviewPanel({
+  deliverable,
+  verdict,
+  taskId,
+}: {
+  deliverable: Deliverable;
+  verdict: Verdict;
+  taskId: string;
+}) {
+  return (
+    <div className="overflow-hidden rounded-2xl border border-border bg-card/40">
+      <div className="flex items-center justify-between gap-3 border-b border-border px-6 py-3.5">
+        <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
+          Review deliverable
+        </span>
+        {!verdict && (
+          <span className="flex items-center gap-1.5 font-mono text-[11px] text-muted-foreground">
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#A978EB]" />
+            judging…
+          </span>
+        )}
+      </div>
+      <div className="px-6 py-5">
+        <ReviewBody deliverable={deliverable} verdict={verdict} taskId={taskId} />
+      </div>
+    </div>
+  );
+}
+
+
+// Shared deliverable + verdict-reasoning content. Used both as the primary
+// review panel body and (collapsed) in the settled-history section.
+function ReviewBody({
+  deliverable,
+  verdict,
+  taskId,
+}: {
+  deliverable: Deliverable;
+  verdict: Verdict;
+  taskId: string;
+}) {
+  return (
+    <div className="space-y-5">
+      {verdict && <VerdictHero verdict={verdict} />}
+
+      {deliverable.content_text && (
+        <div>
+          <p className="mb-2 font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
+            Write-up
+          </p>
+          <pre className="max-h-64 overflow-auto whitespace-pre-wrap rounded-md border border-border bg-card/60 p-3 text-sm text-foreground/90">
+            {deliverable.content_text}
+          </pre>
+        </div>
+      )}
+
+      {deliverable.files && deliverable.files.length > 0 && (
+        <div>
+          <p className="mb-2 font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
+            Files ({deliverable.files.length})
+          </p>
+          <div className="overflow-hidden rounded-md border border-border">
+            <table className="w-full text-sm">
+              <thead className="bg-card/60 text-left font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                <tr>
+                  <th className="px-3 py-2">Name</th>
+                  <th className="px-3 py-2">Size</th>
+                  <th className="px-3 py-2">sha256</th>
+                  <th className="px-3 py-2"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {deliverable.files.map((f) => (
+                  <tr key={f.key} className="border-t border-border/60">
+                    <td className="px-3 py-2 font-mono text-xs">{f.name}</td>
+                    <td className="px-3 py-2 font-mono text-xs text-muted-foreground">
+                      {formatBytes(f.sizeBytes)}
+                    </td>
+                    <td className="px-3 py-2 font-mono text-[10px] text-muted-foreground">
+                      {f.sha256.slice(0, 12)}…
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const res = await fetch(
+                            `/api/v1/tasks/${taskId}/deliverable/download-url`,
+                            {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              credentials: "include",
+                              body: JSON.stringify({ key: f.key }),
+                            },
+                          );
+                          const json = await res.json();
+                          if (!res.ok) {
+                            alert(json.error?.message ?? "Download failed");
+                            return;
+                          }
+                          window.open(json.url, "_blank", "noopener,noreferrer");
+                        }}
+                        className="rounded-md border border-border bg-card/60 px-3 py-1 text-xs font-medium transition-colors hover:border-foreground/30"
+                      >
+                        Download
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {deliverable.external_links && deliverable.external_links.length > 0 && (
+        <div>
+          <p className="mb-2 font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
+            External links
+          </p>
+          <ul className="space-y-1 text-sm">
+            {deliverable.external_links.map((l) => (
+              <li key={l.url}>
+                <a
+                  href={l.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[#c8a8f5] underline-offset-4 hover:underline"
+                >
+                  {l.label ? `${l.label} — ${l.url}` : l.url}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {deliverable.submitted_at && (
+        <p className="font-mono text-[11px] text-muted-foreground">
+          Submitted {formatDate(deliverable.submitted_at)}
+        </p>
+      )}
+    </div>
+  );
 }
 
 function ActionPanel({
