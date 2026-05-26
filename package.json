@@ -9,12 +9,11 @@
     "mcp-proxy"
   ],
   "scripts": {
-    "dev": "powershell -ExecutionPolicy Bypass -NoProfile -File ./scripts/dev.ps1",
-    "stop": "powershell -ExecutionPolicy Bypass -NoProfile -File ./scripts/stop.ps1",
     "lint": "eslint .",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "build": "npm run build --workspaces --if-present",
+    "web:dev": "npm run -w @basira/web dev",
     "daemon:dev": "npm run -w @basira/daemon dev",
     "daemon:e2e": "npm run -w @basira/daemon e2e",
     "onboard": "tsx tools/onboard/index.ts"
