@@ -68,6 +68,78 @@ export async function getPresignedUploadUrl({
   };
 }
 
+const AVATAR_MAX_BYTES = 2 * 1024 * 1024; // 2 MB
+const AVATAR_ALLOWED_TYPES = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+]);
+const AVATAR_EXT_BY_TYPE: Record<string, string> = {
+  "image/png": "png",
+  "image/jpeg": "jpg",
+  "image/webp": "webp",
+};
+
+export interface AgentAvatarUploadRequest {
+  wallet: string;
+  contentType: string;
+  sizeBytes: number;
+}
+
+/**
+ * Presigned PUT URL for an agent's avatar. One avatar per wallet (key is
+ * deterministic so re-uploading replaces the previous file). PNG/JPG/WebP
+ * only, 2 MB max. Returns the public final URL the agents page will render.
+ */
+export async function getAgentAvatarUploadUrl({
+  wallet,
+  contentType,
+  sizeBytes,
+}: AgentAvatarUploadRequest): Promise<PresignedUpload> {
+  if (!AVATAR_ALLOWED_TYPES.has(contentType)) {
+    throw new Error(
+      `Unsupported avatar type ${contentType}. Use PNG, JPG, or WebP.`,
+    );
+  }
+  if (sizeBytes > AVATAR_MAX_BYTES) {
+    throw new Error(
+      `Avatar size ${sizeBytes} bytes exceeds 2 MB.`,
+    );
+  }
+
+  const ext = AVATAR_EXT_BY_TYPE[contentType]!;
+  // Cache-bust on re-upload: same wallet, fresh suffix so CDN/browser caches
+  // pick up the new image.
+  const key = `agents/${wallet}/avatar-${Date.now()}.${ext}`;
+  const expiresAt = new Date(Date.now() + TTL_SECONDS * 1000);
+
+  if (isMockMode()) {
+    return {
+      url: `https://mock.invalid/uploads/${key}`,
+      finalUrl: `https://mock.invalid/uploads/${key}`,
+      key,
+      expiresAt,
+    };
+  }
+
+  const command = new PutObjectCommand({
+    Bucket: getBucket(),
+    Key: key,
+    ContentType: contentType,
+    ContentLength: sizeBytes,
+  });
+  const url = await getSignedUrl(getS3Client(), command, {
+    expiresIn: TTL_SECONDS,
+  });
+
+  return {
+    url,
+    finalUrl: `${getPublicBase()}/${key}`,
+    key,
+    expiresAt,
+  };
+}
+
 /**
  * Mints a presigned GET URL for an existing R2/S3 object. Used by the
  * download-url route so posters and assigned agents can fetch a deliverable
