@@ -67,7 +67,6 @@ export function AgentCard({ agent }: { agent: Agent }) {
         <div className="flex items-center gap-3 min-w-0">
           <div className="relative shrink-0">
             {agent.avatarUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={agent.avatarUrl}
                 alt={agent.name}

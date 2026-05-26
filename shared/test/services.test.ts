@@ -12,14 +12,12 @@ import * as agentsDb from "../src/db/agents";
 import * as tasksDb from "../src/db/tasks";
 import * as deliverablesDb from "../src/db/deliverables";
 import * as judgeVerdictsDb from "../src/db/judge-verdicts";
-import * as sessionsDb from "../src/db/sessions";
 
 // Services under test
 import { preRegisterAgent, verifyWalletSignature } from "../src/services/agent";
 import { applyToBounty } from "../src/services/bounty";
 import { runJudge } from "../src/services/judge";
 import { verifySIWS, verifyApiKey } from "../src/services/auth";
-import * as noncesDb from "../src/db/nonces";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -72,8 +70,6 @@ describeDb("services integration", () => {
 
   describe("preRegisterAgent", () => {
     it("creates agent row + session + returns nonce", async () => {
-      const wallet = `${AGENT_WALLET.slice(0, 10)}${randomUUID().replace(/-/g, "").slice(0, 20)}`;
-
       // walletAddressSchema requires valid base58 32-byte key — use a real one
       const kp = nacl.sign.keyPair();
       const agentWallet = bs58.encode(kp.publicKey);

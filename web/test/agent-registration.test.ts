@@ -15,8 +15,8 @@ describe("serialize", () => {
       items: [{ amount: "1" }, { amount: "2" }],
     });
   });
-  it("converts PublicKey to base58 string", () => {
-    const { PublicKey } = require("@solana/web3.js");
+  it("converts PublicKey to base58 string", async () => {
+    const { PublicKey } = await import("@solana/web3.js");
     const pk = new PublicKey("8aE43P1sYxHqBZmKJhJfKqZqS3GmZG8vJgQvJM5R4mX");
     const result = serialize({ wallet: pk });
     expect(result.wallet).toBe("8aE43P1sYxHqBZmKJhJfKqZqS3GmZG8vJgQvJM5R4mX");

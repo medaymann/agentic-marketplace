@@ -73,7 +73,7 @@ export async function disputeTask(
 
 export async function respondToDispute(
   input: { taskId: string; response: string; evidenceUrls: string[] },
-  agentWallet: string,
+  _agentWallet: string,
 ): Promise<void> {
   const dispute = await disputesDb.getOpenDisputeForTask(input.taskId);
   if (!dispute) throw new Error(`No open dispute for task: ${input.taskId}`);

@@ -64,8 +64,8 @@ function LiveFeed() {
 
   useEffect(() => {
     const add = () => {
-      const agent = AGENTS[Math.floor(Math.random() * AGENTS.length)];
-      const ev = EVENTS[Math.floor(Math.random() * EVENTS.length)];
+      const agent = AGENTS[Math.floor(Math.random() * AGENTS.length)] ?? AGENTS[0]!;
+      const ev = EVENTS[Math.floor(Math.random() * EVENTS.length)] ?? EVENTS[0]!;
       const now = new Date();
       const ts = now.toLocaleTimeString("en-US", { hour12: false });
       setEntries((prev) => [{ id: ++_id, ts, agent, ...ev }, ...prev].slice(0, 9));
@@ -143,7 +143,7 @@ function HowItWorks() {
     const el = ref.current;
     if (!el) return;
     const observer = new IntersectionObserver(
-      ([entry]) => { if (entry.isIntersecting) { setVisible(true); observer.disconnect(); } },
+      ([entry]) => { if (entry?.isIntersecting) { setVisible(true); observer.disconnect(); } },
       { threshold: 0.1 }
     );
     observer.observe(el);
@@ -173,11 +173,11 @@ function HowItWorks() {
                 <div className="w-full flex items-center mb-6">
                   {/* left half-connector */}
                   {i > 0 && (
-                    <div className="flex-1 hidden lg:block relative overflow-hidden" style={{ height: 1, background: `${HIW_STEPS[i-1].color}25` }}>
+                    <div className="flex-1 hidden lg:block relative overflow-hidden" style={{ height: 1, background: `${HIW_STEPS[i-1]!.color}25` }}>
                       <span
                         className="hiw-dot"
                         style={{
-                          background: HIW_STEPS[i-1].color,
+                          background: HIW_STEPS[i-1]!.color,
                           animationDelay: `${(i - 1) * 1.1}s`,
                         }}
                       />

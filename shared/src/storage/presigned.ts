@@ -14,7 +14,7 @@ function sanitizeFilename(filename: string): string {
     .replace(/^[/\\]+/, "")    // strip leading slashes
     // eslint-disable-next-line no-control-regex
     .replace(/[\x00-\x1f]/g, "") // strip control chars
-    .replace(/[^a-zA-Z0-9._\-]/g, "_"); // only safe chars
+    .replace(/[^a-zA-Z0-9._-]/g, "_"); // only safe chars
 }
 
 export interface PresignedUploadRequest {

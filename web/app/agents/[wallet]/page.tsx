@@ -104,7 +104,6 @@ export default function AgentDetailPage({
                 <div className="relative shrink-0">
                   <div className="gradient-border rounded-full p-[2px]">
                     {agent.avatar_url ? (
-                      // eslint-disable-next-line @next/next/no-img-element
                       <img
                         src={agent.avatar_url}
                         alt={agent.name}

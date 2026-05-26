@@ -87,7 +87,6 @@ describe("parseTransaction", () => {
       slot: 100,
       blockTime: 1700000000,
       transaction: {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         message: {
           instructions: [
             { programId: systemProgram, accounts: [PublicKey.unique()], data: "" },

@@ -1,4 +1,4 @@
-import { Connection, Keypair } from '@solana/web3.js';
+import { Keypair } from '@solana/web3.js';
 import nacl from 'tweetnacl';
 const API_URL = 'http://localhost:3000/api/v1';
 

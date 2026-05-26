@@ -6,7 +6,6 @@ import * as agentsDb from "../db/agents";
 import { validateAgainstSchema } from "../domain/typed-inputs";
 import { getConnection } from "../solana/connection";
 import { getProgram } from "../solana/program";
-import { taskIdFromUuid } from "../solana/pdas";
 import {
   buildCreateTaskSolTx,
   buildCreateTaskUsdcTx,

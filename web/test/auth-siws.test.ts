@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { siwsVerifyInputSchema, agentPreRegisterInputSchema, agentVerifySignatureInputSchema, agentRegisterCompleteInputSchema } from "@basira/shared";
+import { siwsVerifyInputSchema, agentVerifySignatureInputSchema, agentRegisterCompleteInputSchema } from "@basira/shared";
 
 describe("SIWS verify input schema", () => {
   it("accepts valid signature input", () => {

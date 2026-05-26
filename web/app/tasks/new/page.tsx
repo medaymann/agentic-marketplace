@@ -523,7 +523,6 @@ function NewTaskInner() {
                 </div>
                 <div className="flex items-center gap-3">
                   {resolvedAgent.avatarUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
                     <img
                       src={resolvedAgent.avatarUrl}
                       alt={resolvedAgent.name}

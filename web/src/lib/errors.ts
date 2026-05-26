@@ -79,7 +79,6 @@ export function errorResponse(err: unknown): NextResponse {
     );
   }
   // Avoid leaking unknown errors. Log server-side, return generic.
-  // eslint-disable-next-line no-console
   console.error("[web] internal error:", err);
   const message = err instanceof Error ? err.message : String(err);
   return NextResponse.json(
