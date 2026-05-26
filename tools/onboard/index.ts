@@ -16,8 +16,8 @@ import { createServer } from "node:http";
 import { spawn } from "node:child_process";
 import { platform } from "node:os";
 import { stdin, stdout } from "node:process";
-import { existsSync, writeFileSync } from "node:fs";
-import { resolve, basename } from "node:path";
+import { existsSync, writeFileSync, readFileSync, statSync } from "node:fs";
+import { resolve, basename, extname } from "node:path";
 import {
   TextPrompt,
   SelectPrompt,
@@ -247,6 +247,76 @@ function fatal(msg: string): never {
  * Write credentials to a .env the SDK auto-loads. Overwrite-safe: if .env
  * exists we write .env.basira instead. Returns the path written.
  */
+const AVATAR_MAX_BYTES = 2 * 1024 * 1024;
+const AVATAR_MIME_BY_EXT: Record<string, string> = {
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".webp": "image/webp",
+};
+
+/**
+ * Validate a local image path, request a presigned PUT, upload the bytes, and
+ * persist the public URL on the agent. Throws on any failure with a friendly
+ * message so the CLI can re-prompt.
+ */
+async function uploadAvatar(localPath: string, apiKey: string): Promise<string> {
+  const abs = resolve(process.cwd(), localPath);
+  if (!existsSync(abs)) throw new Error(`File not found: ${localPath}`);
+  const ext = extname(abs).toLowerCase();
+  const contentType = AVATAR_MIME_BY_EXT[ext];
+  if (!contentType) {
+    throw new Error("Use PNG, JPG, or WebP.");
+  }
+  const stat = statSync(abs);
+  if (!stat.isFile()) throw new Error(`Not a file: ${localPath}`);
+  if (stat.size > AVATAR_MAX_BYTES) {
+    throw new Error(`Over 2 MB (file is ${(stat.size / 1024 / 1024).toFixed(2)} MB).`);
+  }
+  const bytes = readFileSync(abs);
+
+  // 1. Presign.
+  const presignRes = await fetch(`${BASIRA_URL}/api/v1/agents/avatar/upload-url`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({ contentType, sizeBytes: stat.size }),
+  });
+  if (!presignRes.ok) {
+    const err = (await presignRes.json().catch(() => ({}))) as {
+      error?: { message?: string };
+    };
+    throw new Error(err.error?.message ?? `Upload URL request failed (HTTP ${presignRes.status})`);
+  }
+  const presign = (await presignRes.json()) as { url: string; finalUrl: string };
+
+  // 2. PUT the bytes.
+  const putRes = await fetch(presign.url, {
+    method: "PUT",
+    headers: { "Content-Type": contentType },
+    body: bytes,
+  });
+  if (!putRes.ok) {
+    throw new Error(`Upload failed (HTTP ${putRes.status})`);
+  }
+
+  // 3. Confirm.
+  const confirmRes = await fetch(`${BASIRA_URL}/api/v1/agents/avatar/confirm`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({ avatarUrl: presign.finalUrl }),
+  });
+  if (!confirmRes.ok) {
+    throw new Error(`Could not save avatar URL (HTTP ${confirmRes.status})`);
+  }
+  return presign.finalUrl;
+}
+
 function writeEnvFile(payload: KeyPayload): string {
   const entries = [
     `BASIRA_API_KEY=${payload.apiKey}`,
@@ -366,6 +436,24 @@ async function main() {
     payload = await waitForKey(sessionId);
   } finally {
     stop();
+  }
+
+  // Avatar upload — optional. Re-prompts on bad input; Enter to skip.
+  while (true) {
+    const path = await text("Avatar image", {
+      hint: "optional · PNG / JPG / WebP, up to 2 MB — Enter to skip",
+      optional: true,
+    });
+    if (!path) break;
+    try {
+      await uploadAvatar(path, payload.apiKey);
+      stdout.write(`${bar()}  ${c.violet("✓")} Avatar uploaded\n`);
+      break;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      stdout.write(`${bar()}  ${c.red("✗")} ${msg}\n`);
+      // Loop and re-prompt.
+    }
   }
 
   let envPath: string | null;
