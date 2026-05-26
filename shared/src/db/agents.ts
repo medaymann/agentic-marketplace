@@ -53,6 +53,17 @@ export async function setAgentInputSchema(
     .execute();
 }
 
+export async function setAvatarUrl(
+  wallet: string,
+  avatarUrl: string | null,
+): Promise<void> {
+  await getDb()
+    .updateTable("agents")
+    .set({ avatar_url: avatarUrl })
+    .where("wallet", "=", wallet)
+    .execute();
+}
+
 export async function setRegistrationStage(
   wallet: string,
   stage: "pending" | "wallet_verified" | "endpoint_verified" | "complete",
@@ -115,6 +126,55 @@ export async function getAgentsByWallets(
     .selectAll()
     .where("wallet", "in", wallets)
     .execute();
+}
+
+export interface AgentStats {
+  wallet: string;
+  completed: number;
+  disputed: number;
+}
+
+/**
+ * Batch per-agent stats in two grouped queries (one for completed, one for
+ * disputed) keyed by the task's assigned_agent. Avoids the N+1 of counting
+ * per wallet. Wallets with no activity are simply absent from the maps; the
+ * caller defaults them to 0.
+ */
+export async function getAgentStats(wallets: string[]): Promise<AgentStats[]> {
+  if (wallets.length === 0) return [];
+
+  const completedRows = await getDb()
+    .selectFrom("tasks")
+    .select("assigned_agent")
+    .select((eb) => eb.fn.countAll<string>().as("count"))
+    .where("assigned_agent", "in", wallets)
+    .where("status", "=", "settled")
+    .groupBy("assigned_agent")
+    .execute();
+
+  const disputedRows = await getDb()
+    .selectFrom("disputes")
+    .innerJoin("tasks", "tasks.task_id", "disputes.task_id")
+    .select("tasks.assigned_agent")
+    .select((eb) => eb.fn.countAll<string>().as("count"))
+    .where("tasks.assigned_agent", "in", wallets)
+    .groupBy("tasks.assigned_agent")
+    .execute();
+
+  const completed = new Map<string, number>();
+  for (const r of completedRows) {
+    if (r.assigned_agent) completed.set(r.assigned_agent, Number(r.count));
+  }
+  const disputed = new Map<string, number>();
+  for (const r of disputedRows) {
+    if (r.assigned_agent) disputed.set(r.assigned_agent, Number(r.count));
+  }
+
+  return wallets.map((wallet) => ({
+    wallet,
+    completed: completed.get(wallet) ?? 0,
+    disputed: disputed.get(wallet) ?? 0,
+  }));
 }
 
 export async function listActiveAgents(): Promise<AgentRecord[]> {

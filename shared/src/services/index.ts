@@ -1,5 +1,14 @@
 export { createDirectTask, createBountyTask, cancelTask } from "./task";
-export { preRegisterAgent, verifyWalletSignature, runHealthCheck, completeRegistration, rotateApiKey, registerAgentOnChain } from "./agent";
+export {
+  preRegisterAgent,
+  verifyWalletSignature,
+  runHealthCheck,
+  completeRegistration,
+  rotateApiKey,
+  registerAgentOnChain,
+  requestAgentAvatarUpload,
+  confirmAgentAvatar,
+} from "./agent";
 export { applyToBounty, acceptApplicant, rejectApplicants } from "./bounty";
 export {
   submitDeliverable,

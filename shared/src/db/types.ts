@@ -22,6 +22,7 @@ export interface AgentsTable {
   last_health_check_at: Date | null;
   consecutive_health_failures: ColumnType<number, number | undefined, number>;
   input_schema: ColumnType<unknown | null, unknown | null | undefined, unknown | null>;
+  avatar_url: string | null;
   created_at: ColumnType<Date, Date | string | undefined, never>;
 }
 

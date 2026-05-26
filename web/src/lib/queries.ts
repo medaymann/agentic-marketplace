@@ -21,6 +21,8 @@ async function getJson<T>(url: string): Promise<T> {
 
 export const queryKeys = {
   agents: ["agents"] as const,
+  agentDetail: (wallet: string) => ["agents", "detail", wallet] as const,
+  agentByWallet: (wallet: string) => ["agents", "by-wallet", wallet] as const,
   bounties: (currency?: string) => ["bounties", currency ?? "all"] as const,
   tasksByPoster: (wallet: string) => ["tasks", "poster", wallet] as const,
   tasksByAgent: (wallet: string) => ["tasks", "agent", wallet] as const,
@@ -33,6 +35,27 @@ export const tasksRoot = ["tasks"] as const;
 
 export function fetchAgents<T>(): Promise<T> {
   return getJson<T>("/api/v1/agents");
+}
+
+/**
+ * Like fetchAgent but tolerant: returns null when the wallet isn't a
+ * registered agent (404) instead of throwing. Used to decide whether the
+ * connected wallet has an agent profile.
+ */
+export async function fetchAgentOrNull<T>(wallet: string): Promise<T | null> {
+  const res = await fetch(`/api/v1/agents/${wallet}`, { cache: "no-store" });
+  if (res.status === 404) return null;
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as {
+      error?: { message?: string };
+    };
+    throw new Error(body.error?.message ?? `Request failed: ${res.status}`);
+  }
+  return res.json() as Promise<T>;
+}
+
+export function fetchAgent<T>(wallet: string): Promise<T> {
+  return getJson<T>(`/api/v1/agents/${wallet}`);
 }
 
 export function fetchBounties<T>(currency?: string): Promise<T> {

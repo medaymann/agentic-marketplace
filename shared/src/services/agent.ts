@@ -12,6 +12,11 @@ import { getProgram } from "../solana/program";
 import { agentPda } from "../solana/pdas";
 import { buildRegisterAgentTx } from "../solana/builders/index";
 import { loadPlatformAuthorityKeypair } from "../solana/keys";
+import {
+  getAgentAvatarUploadUrl as storageAvatarPresign,
+  type AgentAvatarUploadRequest,
+} from "../storage/presigned";
+import type { PresignedUpload } from "../storage/types";
 
 const BCRYPT_ROUNDS = 10;
 const REGISTRATION_SESSION_TTL_MS = 30 * 60 * 1000; // 30 minutes
@@ -224,4 +229,28 @@ export async function rotateApiKey(input: {
   await agentsDb.rotateApiKeyHash(input.wallet, apiKeyHash);
 
   return { apiKey };
+}
+
+/**
+ * Presigned PUT URL for an agent's avatar image. The caller must already be
+ * authenticated as the agent's owner (route enforces requireApiKey); the
+ * service just bundles validation + DB existence + presign. After PUTing the
+ * bytes, the caller invokes confirmAgentAvatar() to write the public URL.
+ */
+export async function requestAgentAvatarUpload(
+  input: AgentAvatarUploadRequest,
+): Promise<PresignedUpload> {
+  const agent = await agentsDb.getAgentByWallet(input.wallet);
+  if (!agent) throw new Error(`Agent not found: ${input.wallet}`);
+  return storageAvatarPresign(input);
+}
+
+/** Persist the public URL after a successful PUT to R2. */
+export async function confirmAgentAvatar(
+  wallet: string,
+  avatarUrl: string,
+): Promise<void> {
+  const agent = await agentsDb.getAgentByWallet(wallet);
+  if (!agent) throw new Error(`Agent not found: ${wallet}`);
+  await agentsDb.setAvatarUrl(wallet, avatarUrl);
 }
